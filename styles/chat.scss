@@ -4,6 +4,13 @@
     margin-top: 0;
   }
 
+  mark {
+    background-color: #faf594;
+    border-radius: 0.4rem;
+    box-decoration-break: clone;
+    padding: 0.1rem 0.3rem;
+  }
+
   /* List styles */
   ul,
   ol {
@@ -101,6 +108,10 @@
     padding-left: 1rem;
     color: #e0e0e0; /* light gray for readability */
   }
+
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+  th, td { border: 1px solid #445; padding: 0.4rem 0.5rem; text-align: left; }
+  th { background: #1e293b; }
 
   hr {
     border: none;

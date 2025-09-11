@@ -66,4 +66,40 @@ export function IconCheck({ className }: { className?: string }) {
 export function IconX({ className }: { className?: string }) {
   return (<svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round"/></svg>);
 }
+export function IconAlignLeft({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="4" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+export function IconAlignCenter({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="6" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+export function IconAlignRight({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="8" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+export function IconAlignJustify({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="4" y="9" width="16" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
 

@@ -6,8 +6,15 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Mathematics from '@tiptap/extension-mathematics';
+import TextAlign from '@tiptap/extension-text-align';
+import Highlight from '@tiptap/extension-highlight';
+import { Color, TextStyle } from '@tiptap/extension-text-style'
 import * as Popover from '@radix-ui/react-popover';
 import katex from 'katex';
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 
 // Local hook replicating the behavior expected by provided MenuBar code
 function useEditorState<T>({ editor, selector }: { editor: Editor; selector: (ctx: { editor: Editor }) => T }): T {
@@ -37,7 +44,12 @@ function MenuBar({ editor }: { editor: Editor }) {
     editor.chain().focus().toggleHeading({ level }).run();
   }, [editor]);
   const [mathOpen, setMathOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState<'inline' | 'block'>('inline');
+  // Highlight UI state
+  const [hlColor, setHlColor] = useState<string>('#fef08a');
+  // Text color UI state
+  const [tcColor, setTcColor] = useState<string>('#ef4444');
   const [editExisting, setEditExisting] = useState<null | 'inline' | 'block'>(null);
   const [editRange, setEditRange] = useState<null | { from: number; to: number }>(null);
   const previewHtml = useMemo(() => {
@@ -135,6 +147,7 @@ function MenuBar({ editor }: { editor: Editor }) {
         canStrike: ctx.editor.can().chain().toggleStrike().run() ?? false,
         isCode: ctx.editor.isActive('code') ?? false,
         canCode: ctx.editor.can().chain().toggleCode().run() ?? false,
+        isHighlight: ctx.editor.isActive('highlight') ?? false,
         canClearMarks: ctx.editor.can().chain().unsetAllMarks().run() ?? false,
         isParagraph: ctx.editor.isActive('paragraph') ?? false,
         isHeading1: ctx.editor.isActive('heading', { level: 1 }) ?? false,
@@ -147,6 +160,11 @@ function MenuBar({ editor }: { editor: Editor }) {
         isOrderedList: ctx.editor.isActive('orderedList') ?? false,
         isCodeBlock: ctx.editor.isActive('codeBlock') ?? false,
         isBlockquote: ctx.editor.isActive('blockquote') ?? false,
+        isAlignLeft: ctx.editor.isActive({ textAlign: 'left' }) ?? false,
+        isAlignCenter: ctx.editor.isActive({ textAlign: 'center' }) ?? false,
+        isAlignRight: ctx.editor.isActive({ textAlign: 'right' }) ?? false,
+        isAlignJustify: ctx.editor.isActive({ textAlign: 'justify' }) ?? false,
+        currentColor: (ctx.editor.getAttributes('textStyle')?.color || null) as string | null,
         canUndo: ctx.editor.can().chain().undo().run() ?? false,
         canRedo: ctx.editor.can().chain().redo().run() ?? false,
       }
@@ -156,92 +174,153 @@ function MenuBar({ editor }: { editor: Editor }) {
   return (
     <div className="control-group">
       <div className="button-group flex flex-wrap gap-1 mb-2 text-xs relative z-10">
-        <button title="Bold" aria-label="Bold"
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          disabled={!editorState.canBold}
-          className={clsx('p-2 rounded border', editorState.isBold && 'bg-indigo-600 text-white')}
-        >
-          <IconBold className="h-4 w-4" />
-        </button>
-        <button title="Italic" aria-label="Italic"
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          disabled={!editorState.canItalic}
-          className={clsx('p-2 rounded border', editorState.isItalic && 'bg-indigo-600 text-white')}
-        >
-          <IconItalic className="h-4 w-4" />
-        </button>
-        <button title="Strike" aria-label="Strike"
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          disabled={!editorState.canStrike}
-          className={clsx('p-2 rounded border', editorState.isStrike && 'bg-indigo-600 text-white')}
-        >
-          <IconStrikethrough className="h-4 w-4" />
-        </button>
-        <button title="Code" aria-label="Code"
-          onClick={() => editor.chain().focus().toggleCode().run()}
-          disabled={!editorState.canCode}
-          className={clsx('p-2 rounded border', editorState.isCode && 'bg-indigo-600 text-white')}
-        >
-          <IconCode className="h-4 w-4" />
-        </button>
-        <button title="Paragraph" aria-label="Paragraph"
-          onClick={() => editor.chain().focus().setParagraph().run()}
-          className={clsx('p-2 rounded border', editorState.isParagraph && 'bg-indigo-600 text-white')}
-        >
-          <IconPilcrow className="h-4 w-4" />
-        </button>
-        <button title="H1" aria-label="Heading 1"
-          onClick={() => applyHeading(1)}
-          className={clsx('p-2 rounded border', editorState.isHeading1 && 'bg-indigo-600 text-white')}
-        >
-          <span className="text-[10px] font-semibold">H1</span>
-        </button>
-        <button title="H2" aria-label="Heading 2"
-          onClick={() => applyHeading(2)}
-          className={clsx('p-2 rounded border', editorState.isHeading2 && 'bg-indigo-600 text-white')}
-        >
-          <span className="text-[10px] font-semibold">H2</span>
-        </button>
-        <button title="H3" aria-label="Heading 3"
-          onClick={() => applyHeading(3)}
-          className={clsx('p-2 rounded border', editorState.isHeading3 && 'bg-indigo-600 text-white')}
-        >
-          <span className="text-[10px] font-semibold">H3</span>
-        </button>
-        <button title="H4" aria-label="Heading 4"
-          onClick={() => applyHeading(4)}
-          className={clsx('p-2 rounded border', editorState.isHeading4 && 'bg-indigo-600 text-white')}
-        >
-          <span className="text-[10px] font-semibold">H4</span>
-        </button>
-        <button title="Bulleted list" aria-label="Bulleted list"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={clsx('p-2 rounded border', editorState.isBulletList && 'bg-indigo-600 text-white')}
-        >
-          <IconListBullet className="h-4 w-4" />
-        </button>
-        <button title="Ordered list" aria-label="Ordered list"
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={clsx('p-2 rounded border', editorState.isOrderedList && 'bg-indigo-600 text-white')}
-        >
-          <IconListOrdered className="h-4 w-4" />
-        </button>
-        <button title="Code block" aria-label="Code block"
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          className={clsx('p-2 rounded border', editorState.isCodeBlock && 'bg-indigo-600 text-white')}
-        >
-          <IconBraces className="h-4 w-4" />
-        </button>
-        <button title="Quote" aria-label="Blockquote"
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          className={clsx('p-2 rounded border', editorState.isBlockquote && 'bg-indigo-600 text-white')}
-        >
-          <IconQuote className="h-4 w-4" />
-        </button>
-        <button title="Horizontal rule" aria-label="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()} className="p-2 rounded border"><IconHR className="h-4 w-4" /></button>
-        <button title="Hard break" aria-label="Hard break" onClick={() => editor.chain().focus().setHardBreak().run()} className="p-2 rounded border"><IconReturn className="h-4 w-4" /></button>
-        <button title="Undo" aria-label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editorState.canUndo} className="p-2 rounded border disabled:opacity-50"><IconUndo className="h-4 w-4" /></button>
-        <button title="Redo" aria-label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editorState.canRedo} className="p-2 rounded border disabled:opacity-50"><IconRedo className="h-4 w-4" /></button>
+      {/* Format group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="Format" aria-label="Format" className="p-2 rounded border"><IconBold className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 space-x-2 flex">
+            <div className="flex gap-1">
+              <button title="Bold" onClick={() => editor.chain().focus().toggleBold().run()} disabled={!editorState.canBold} className={clsx('p-2 rounded border', editorState.isBold && 'bg-indigo-600 text-white')}><IconBold className="h-4 w-4"/></button>
+              <button title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()} disabled={!editorState.canItalic} className={clsx('p-2 rounded border', editorState.isItalic && 'bg-indigo-600 text-white')}><IconItalic className="h-4 w-4"/></button>
+              <button title="Strike" onClick={() => editor.chain().focus().toggleStrike().run()} disabled={!editorState.canStrike} className={clsx('p-2 rounded border', editorState.isStrike && 'bg-indigo-600 text-white')}><IconStrikethrough className="h-4 w-4"/></button>
+              <button title="Code" onClick={() => editor.chain().focus().toggleCode().run()} disabled={!editorState.canCode} className={clsx('p-2 rounded border', editorState.isCode && 'bg-indigo-600 text-white')}><IconCode className="h-4 w-4"/></button>
+            </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Block group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="Blocks" aria-label="Blocks" className="p-2 rounded border"><IconPilcrow className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 space-y-2">
+            <div className="flex gap-1">
+              <button title="Paragraph" onClick={() => editor.chain().focus().setParagraph().run()} className={clsx('p-2 rounded border', editorState.isParagraph && 'bg-indigo-600 text-white')}><IconPilcrow className="h-4 w-4"/></button>
+              <button title="Blockquote" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={clsx('p-2 rounded border', editorState.isBlockquote && 'bg-indigo-600 text-white')}><IconQuote className="h-4 w-4"/></button>
+              <button title="Code block" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={clsx('p-2 rounded border', editorState.isCodeBlock && 'bg-indigo-600 text-white')}><IconBraces className="h-4 w-4"/></button>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {[1,2,3,4].map((lvl)=> (
+                <button key={lvl} title={`H${lvl}`} onClick={() => applyHeading(lvl as any)} className={clsx('p-2 rounded border', editor.isActive('heading',{level:lvl}) && 'bg-indigo-600 text-white')}><span className="text-[10px] font-semibold">H{lvl}</span></button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <button title="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()} className="p-2 rounded border"><IconHR className="h-4 w-4"/></button>
+              <button title="Hard break" onClick={() => editor.chain().focus().setHardBreak().run()} className="p-2 rounded border"><IconReturn className="h-4 w-4"/></button>
+            </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Lists group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="Lists" aria-label="Lists" className="p-2 rounded border"><IconListBullet className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 flex gap-1">
+            <button title="Bulleted list" onClick={() => editor.chain().focus().toggleBulletList().run()} className={clsx('p-2 rounded border', editorState.isBulletList && 'bg-indigo-600 text-white')}><IconListBullet className="h-4 w-4"/></button>
+            <button title="Ordered list" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={clsx('p-2 rounded border', editorState.isOrderedList && 'bg-indigo-600 text-white')}><IconListOrdered className="h-4 w-4"/></button>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Align group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="Align" aria-label="Align" className="p-2 rounded border"><IconAlignCenter className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 flex gap-1">
+            <button title="Align left" onClick={() => editor.chain().focus().setTextAlign('left').run()} className={clsx('p-2 rounded border', editorState.isAlignLeft && 'bg-indigo-600 text-white')}><IconAlignLeft className="h-4 w-4"/></button>
+            <button title="Align center" onClick={() => editor.chain().focus().setTextAlign('center').run()} className={clsx('p-2 rounded border', editorState.isAlignCenter && 'bg-indigo-600 text-white')}><IconAlignCenter className="h-4 w-4"/></button>
+            <button title="Align right" onClick={() => editor.chain().focus().setTextAlign('right').run()} className={clsx('p-2 rounded border', editorState.isAlignRight && 'bg-indigo-600 text-white')}><IconAlignRight className="h-4 w-4"/></button>
+            <button title="Justify" onClick={() => editor.chain().focus().setTextAlign('justify').run()} className={clsx('p-2 rounded border', editorState.isAlignJustify && 'bg-indigo-600 text-white')}><IconAlignJustify className="h-4 w-4"/></button>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Style group (text color + highlight) */}
+      <Popover.Root open={styleOpen} onOpenChange={setStyleOpen}>
+        <Popover.Trigger asChild>
+          <button title="Style" aria-label="Style" onClick={(e)=>{e.preventDefault(); setStyleOpen(o=>!o);}} className="p-2 rounded border"><IconPalette className="h-4 w-4"/></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[26rem] sm:w-[30rem] max-w-[95vw] space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+              <div className="rounded-md border border-slate-700/70 p-2 bg-slate-800/40">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1">Text</div>
+                <div className="grid grid-cols-7 gap-2 mb-2">
+                  {['#ef4444','#22c55e','#3b82f6','#a855f7','#f59e0b','#e5e7eb','#14b8a6'].map(c => (
+                    <button key={c} title={c} aria-label={`Text color ${c}`} onClick={() => { editor.chain().focus().setColor(c).run(); setTcColor(c); setStyleOpen(false); }} className="h-6 w-6 rounded border border-slate-600/60" style={{ backgroundColor: c }} />
+                  ))}
+                  <button title="Clear" onClick={() => { editor.chain().focus().unsetColor().run(); setStyleOpen(false); }} className="col-span-2 text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70">Clear</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={tcColor || '#000000'} onChange={(e)=> setTcColor(e.target.value)} className="h-6 w-10 rounded border border-slate-600/60 bg-slate-800/60" />
+                  <input value={tcColor} onChange={(e)=> setTcColor(e.target.value)} className="flex-1 rounded bg-slate-800/70 border border-slate-700/70 px-2 py-1 text-xs focus:outline-none focus:ring-0" />
+                </div>
+                <div className="flex justify-end mt-2">
+                  <button onClick={()=> { editor.chain().focus().setColor(tcColor).run(); setStyleOpen(false); }} className="text-[11px] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500">Apply</button>
+                </div>
+              </div>
+              <div className="rounded-md border border-slate-700/70 p-2 bg-slate-800/40">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1">Highlight</div>
+                <div className="grid grid-cols-7 gap-2 mb-2">
+                  {['#fef08a','#bbf7d0','#bfdbfe','#fbcfe8','#e9d5ff','#fed7aa','#e5e7eb'].map(c => (
+                    <button key={c} title={c} aria-label={`Highlight ${c}`} onClick={() => { editor.chain().focus().setHighlight({ color: c }).run(); setHlColor(c); setStyleOpen(false); }} className="h-6 w-6 rounded border border-slate-600/60" style={{ backgroundColor: c }} />
+                  ))}
+                  <button title="Clear" onClick={() => { editor.chain().focus().unsetHighlight().run(); setStyleOpen(false); }} className="col-span-2 text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70">Clear</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={hlColor} onChange={(e)=> setHlColor(e.target.value)} className="h-6 w-10 rounded border border-slate-600/60 bg-slate-800/60" />
+                  <input value={hlColor} onChange={(e)=> setHlColor(e.target.value)} className="flex-1 rounded bg-slate-800/70 border border-slate-700/70 px-2 py-1 text-xs focus:outline-none focus:ring-0" />
+                </div>
+                <div className="flex justify-end mt-2">
+                  <button onClick={()=> { editor.chain().focus().setHighlight({ color: hlColor }).run(); setStyleOpen(false); }} className="text-[11px] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500">Apply</button>
+                </div>
+              </div>
+            </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Table group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="Table" aria-label="Table" className="p-2 rounded border"><IconTable className="h-4 w-4"/></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[18rem] space-y-2">
+            <div className="flex gap-2">
+              <button className="px-2 py-1 text-xs rounded border" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Insert 3x3</button>
+              <button className="px-2 py-1 text-xs rounded border" onClick={() => editor.chain().focus().deleteTable().run()}>Delete table</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().addColumnBefore().run()}>Add column before</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().addColumnAfter().run()}>Add column after</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().deleteColumn().run()}>Delete column</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().addRowBefore().run()}>Add row before</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().addRowAfter().run()}>Add row after</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().deleteRow().run()}>Delete row</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Toggle header row</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().toggleHeaderColumn().run()}>Toggle header column</button>
+              <button className="px-2 py-1 rounded border" onClick={() => editor.chain().focus().toggleHeaderCell().run()}>Toggle header cell</button>
+            </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* History group */}
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button title="History" aria-label="History" className="p-2 rounded border"><IconUndo className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e)=>e.preventDefault()} className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 flex gap-1">
+            <button title="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editorState.canUndo} className="p-2 rounded border disabled:opacity-50"><IconUndo className="h-4 w-4"/></button>
+            <button title="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editorState.canRedo} className="p-2 rounded border disabled:opacity-50"><IconRedo className="h-4 w-4"/></button>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
       {/* Math popover for entering LaTeX with live preview */}
       <Popover.Root open={mathOpen} onOpenChange={setMathOpen}>
         <Popover.Trigger asChild>
@@ -258,11 +337,12 @@ function MenuBar({ editor }: { editor: Editor }) {
         <Popover.Portal>
           <Popover.Content
             side="top"
-            align="start"
+            align="center"
             sideOffset={6}
+            collisionPadding={8}
             onOpenAutoFocus={(e) => e.preventDefault()}
             onCloseAutoFocus={(e) => e.preventDefault()}
-            className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2"
+            className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 max-w-[90vw] max-h-[70vh] overflow-auto space-y-2"
           >
           <div className="text-[11px] uppercase tracking-wider text-slate-400">Insert LaTeX</div>
           <input
@@ -390,6 +470,9 @@ export default function ChatPage() {
   const esRef = useRef<EventSource | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
   const meId = useMemo(() => session?.user?.id ?? null, [session?.user?.id]);
+  // Drag-and-drop across the whole chat area
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const dragCounterRef = useRef(0);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const olderObserverRef = useRef<IntersectionObserver | null>(null);
   const olderInFlightRef = useRef(false);
@@ -401,6 +484,14 @@ export default function ChatPage() {
   const editor = useEditor({
     extensions: [
       StarterKit,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TextStyle,
+      Color.configure({ types: ['textStyle'] }),
+      Highlight.configure({ multicolor: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Mathematics.configure({
         inlineOptions: {
           onClick: (node: any, pos: number) => {
@@ -617,6 +708,67 @@ export default function ChatPage() {
     root.addEventListener('scroll', onScroll, { passive: true });
     return () => root.removeEventListener('scroll', onScroll);
   }, [nextCursor, olderIOEnabled]);
+  
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    setSelectedFiles(prev => {
+      const existing = new Map(prev.map(f => [f.name + ':' + f.size + ':' + f.lastModified, true]));
+      const next: File[] = [...prev];
+      for (const f of arr) {
+        const k = f.name + ':' + f.size + ':' + f.lastModified;
+        if (existing.has(k)) continue;
+        if (next.length >= MAX_FILES) {
+          setError(`Maximum ${MAX_FILES} files per message.`);
+          break;
+        }
+        next.push(f);
+        existing.set(k, true);
+      }
+      return next;
+    });
+  };
+  // Set up full-area drag & drop for files on the chat container
+  useEffect(() => {
+    const el = dropRef.current;
+    if (!el) return;
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes('Files');
+
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      setIsDraggingFiles(true);
+    };
+    const onDragOver = (e: DragEvent) => {
+      if (hasFiles(e)) {
+        e.preventDefault();
+      }
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+      if (dragCounterRef.current === 0) setIsDraggingFiles(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setIsDraggingFiles(false);
+      dragCounterRef.current = 0;
+      const files = e.dataTransfer?.files;
+      if (files && files.length) addFiles(files);
+    };
+
+    el.addEventListener('dragenter', onDragEnter as any);
+    el.addEventListener('dragover', onDragOver as any);
+    el.addEventListener('dragleave', onDragLeave as any);
+    el.addEventListener('drop', onDrop as any);
+    return () => {
+      el.removeEventListener('dragenter', onDragEnter as any);
+      el.removeEventListener('dragover', onDragOver as any);
+      el.removeEventListener('dragleave', onDragLeave as any);
+      el.removeEventListener('drop', onDrop as any);
+    };
+  }, [addFiles]);
 
   const toggleMember = (id: string) => { setSelectedMembers(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
 
@@ -638,24 +790,6 @@ export default function ChatPage() {
 
   const MAX_FILES = 5;
 
-  const addFiles = (files: FileList | File[]) => {
-    const arr = Array.from(files);
-    setSelectedFiles(prev => {
-      const existing = new Map(prev.map(f => [f.name + ':' + f.size + ':' + f.lastModified, true]));
-      const next: File[] = [...prev];
-      for (const f of arr) {
-        const k = f.name + ':' + f.size + ':' + f.lastModified;
-        if (existing.has(k)) continue;
-        if (next.length >= MAX_FILES) {
-          setError(`Maximum ${MAX_FILES} files per message.`);
-          break;
-        }
-        next.push(f);
-        existing.set(k, true);
-      }
-      return next;
-    });
-  };
 
   const removeFileAt = (idx: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
@@ -902,7 +1036,18 @@ function SelectedAttachmentPreview({ file, onRemove }: { file: File; onRemove: (
 }
 
   return (
-    <div ref={dropRef} className="flex h-screen w-screen overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
+    <div ref={dropRef} className="relative flex h-screen w-screen overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
+      {/* Drag & Drop overlay */}
+      {isDraggingFiles && (
+        <div className="pointer-events-none absolute inset-0 z-[200]">
+          <div className="absolute inset-6 rounded-2xl border-2 border-dashed border-indigo-400/70 bg-slate-900/70 backdrop-blur-sm grid place-items-center">
+            <div className="text-center space-y-2">
+              <div className="text-sm font-medium text-indigo-200">Drop files to attach</div>
+              <div className="text-[11px] text-slate-400">You can add up to {MAX_FILES - selectedFiles.length} more file(s)</div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Mobile overlay trigger */}
       <div className="md:hidden absolute top-2 left-2 z-40">
         <button onClick={()=> setSidebarOpen(o=>!o)} className="px-3 py-2 rounded-md bg-slate-800/70 backdrop-blur border border-slate-700 text-xs font-medium shadow hover:bg-slate-700/70">{sidebarOpen ? 'Close' : 'Rooms'}</button>
@@ -1080,18 +1225,6 @@ function SelectedAttachmentPreview({ file, onRemove }: { file: File; onRemove: (
                       <div
                         className="relative rounded-xl border border-slate-600/60 bg-slate-900/40"
                         style={{ height: composerHeight }}
-                        onDragOver={(e) => {
-                          // Allow dropping files
-                          if (e.dataTransfer?.types?.includes('Files')) {
-                            e.preventDefault();
-                          }
-                        }}
-                        onDrop={(e) => {
-                          if (e.dataTransfer?.files?.length) {
-                            e.preventDefault();
-                            addFiles(e.dataTransfer.files);
-                          }
-                        }}
                       >
                         <EditorContent
                           editor={editor}
@@ -1402,6 +1535,14 @@ function IconRedo({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 7 19 11l-4 4" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 11H10a5 5 0 1 0 0 10h3" strokeLinecap="round"/></svg>
   );
 }
+function IconPalette({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M5 18h14" strokeLinecap="round"/>
+      <path d="M12 5l5 12H7L12 5z" fill="currentColor"/>
+    </svg>
+  );
+}
 function IconMath({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M8 7l8 10M8 17l8-10"/></svg>
@@ -1456,6 +1597,50 @@ function IconPlus({ className }: { className?: string }) {
 function IconMinus({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 12h14" strokeLinecap="round"/></svg>
+  );
+}
+function IconAlignLeft({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="4" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+function IconAlignCenter({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="6" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+function IconAlignRight({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="8" y="9" width="12" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+function IconAlignJustify({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 6h16" strokeLinecap="round"/>
+      <rect x="4" y="9" width="16" height="3" rx="1" />
+      <rect x="4" y="14" width="16" height="3" rx="1" />
+    </svg>
+  );
+}
+function IconTable({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="M3 9h18M8 5v14M16 5v14"/>
+    </svg>
   );
 }
 function IconSpinner({ className }: { className?: string }) {

@@ -4,7 +4,7 @@ import type { Editor } from '@tiptap/core';
 import * as Popover from '@radix-ui/react-popover';
 import katex from 'katex';
 import clsx from 'clsx';
-import { IconBold, IconBraces, IconCode, IconHR, IconItalic, IconListBullet, IconListOrdered, IconMath, IconPilcrow, IconQuote, IconRedo, IconReturn, IconStrikethrough, IconUndo } from './Icons';
+import { IconBold, IconBraces, IconCode, IconHR, IconItalic, IconListBullet, IconListOrdered, IconMath, IconPilcrow, IconQuote, IconRedo, IconReturn, IconStrikethrough, IconUndo, IconAlignLeft, IconAlignCenter, IconAlignRight, IconAlignJustify } from './Icons';
 
 function useEditorState<T>({ editor, selector }: { editor: Editor; selector: (ctx: { editor: Editor }) => T }): T {
   const compute = useCallback(() => selector({ editor }), [editor, selector]);
@@ -129,6 +129,10 @@ export function MenuBar({ editor }: { editor: Editor }) {
         isOrderedList: ctx.editor.isActive('orderedList') ?? false,
         isCodeBlock: ctx.editor.isActive('codeBlock') ?? false,
         isBlockquote: ctx.editor.isActive('blockquote') ?? false,
+        isAlignLeft: ctx.editor.isActive({ textAlign: 'left' }) ?? false,
+        isAlignCenter: ctx.editor.isActive({ textAlign: 'center' }) ?? false,
+        isAlignRight: ctx.editor.isActive({ textAlign: 'right' }) ?? false,
+        isAlignJustify: ctx.editor.isActive({ textAlign: 'justify' }) ?? false,
         canUndo: ctx.editor.can().chain().undo().run() ?? false,
         canRedo: ctx.editor.can().chain().redo().run() ?? false,
       }
@@ -177,6 +181,19 @@ export function MenuBar({ editor }: { editor: Editor }) {
         <button title="Quote" aria-label="Blockquote" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={clsx('p-2 rounded border', editorState.isBlockquote && 'bg-indigo-600 text-white')}>
           <IconQuote className="h-4 w-4" />
         </button>
+        <div className="mx-1 w-px bg-slate-600/40" />
+        <button title="Align left" aria-label="Align left" onClick={() => editor.chain().focus().setTextAlign('left').run()} className={clsx('p-2 rounded border', editorState.isAlignLeft && 'bg-indigo-600 text-white')}>
+          <IconAlignLeft className="h-4 w-4" />
+        </button>
+        <button title="Align center" aria-label="Align center" onClick={() => editor.chain().focus().setTextAlign('center').run()} className={clsx('p-2 rounded border', editorState.isAlignCenter && 'bg-indigo-600 text-white')}>
+          <IconAlignCenter className="h-4 w-4" />
+        </button>
+        <button title="Align right" aria-label="Align right" onClick={() => editor.chain().focus().setTextAlign('right').run()} className={clsx('p-2 rounded border', editorState.isAlignRight && 'bg-indigo-600 text-white')}>
+          <IconAlignRight className="h-4 w-4" />
+        </button>
+        <button title="Justify" aria-label="Justify" onClick={() => editor.chain().focus().setTextAlign('justify').run()} className={clsx('p-2 rounded border', editorState.isAlignJustify && 'bg-indigo-600 text-white')}>
+          <IconAlignJustify className="h-4 w-4" />
+        </button>
         <button title="Horizontal rule" aria-label="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()} className="p-2 rounded border"><IconHR className="h-4 w-4" /></button>
         <button title="Hard break" aria-label="Hard break" onClick={() => editor.chain().focus().setHardBreak().run()} className="p-2 rounded border"><IconReturn className="h-4 w-4" /></button>
         <button title="Undo" aria-label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editorState.canUndo} className="p-2 rounded border disabled:opacity-50"><IconUndo className="h-4 w-4" /></button>
@@ -186,7 +203,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
             <button type="button" className="p-2 rounded border" title="Math" aria-label="Math"><IconMath className="h-4 w-4" /></button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content side="top" align="start" sideOffset={6} onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2">
+            <Popover.Content side="top" align="center" sideOffset={6} collisionPadding={8} onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 max-w-[90vw] max-h-[70vh] overflow-auto space-y-2">
               <div className="text-[11px] uppercase tracking-wider text-slate-400">Insert LaTeX</div>
               <input
                 autoFocus
