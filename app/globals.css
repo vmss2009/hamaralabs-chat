@@ -57,6 +57,10 @@ body {
   border-left: 3px solid #ffeb3b;
   padding-left: 1rem;
   margin: 1rem 0;
+  background-color: rgba(148, 163, 184, 0.08); /* subtle slate overlay */
+  color: inherit; /* keep text readable in both light/dark bubbles */
+  font-style: normal; /* avoid default italics */
+  border-radius: 0.25rem;
 }
 .prose blockquote p { margin: 0.5rem 0; }
 .prose blockquote > :first-child { margin-top: 0; }

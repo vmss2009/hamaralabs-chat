@@ -245,10 +245,10 @@ function MenuBar({ editor }: { editor: Editor }) {
       {/* Math popover for entering LaTeX with live preview */}
       <Popover.Root open={mathOpen} onOpenChange={setMathOpen}>
         <Popover.Trigger asChild>
-          <button type="button" onClick={() => setMathOpen((v) => !v)} className="p-2 rounded border" title="Math" aria-label="Math"><IconMath className="h-4 w-4" /></button>
+          <button type="button" className="p-2 rounded border" title="Math" aria-label="Math"><IconMath className="h-4 w-4" /></button>
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content side="top" align="start" sideOffset={6} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2">
+          <Popover.Content side="top" align="start" sideOffset={6} onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2">
           <div className="text-[11px] uppercase tracking-wider text-slate-400">Insert LaTeX</div>
           <input
             autoFocus
@@ -353,14 +353,25 @@ export default function ChatPage() {
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // File uploads removed
+  // Attachments state
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Audio recording
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordedChunksRef = useRef<BlobPart[]>([]);
+  // Image viewer
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [viewerZoom, setViewerZoom] = useState<number>(1);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
   const meId = useMemo(() => session?.user?.id ?? null, [session?.user?.id]);
   // Audio + emoji removed
-  const [recordError] = useState<string | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const editor = useEditor({
@@ -498,18 +509,167 @@ export default function ChatPage() {
     } catch (e: any) { setError(e.message); }
   };
 
+  const MAX_FILES = 5;
+
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    setSelectedFiles(prev => {
+      const existing = new Map(prev.map(f => [f.name + ':' + f.size + ':' + f.lastModified, true]));
+      const next: File[] = [...prev];
+      for (const f of arr) {
+        const k = f.name + ':' + f.size + ':' + f.lastModified;
+        if (existing.has(k)) continue;
+        if (next.length >= MAX_FILES) {
+          setError(`Maximum ${MAX_FILES} files per message.`);
+          break;
+        }
+        next.push(f);
+        existing.set(k, true);
+      }
+      return next;
+    });
+  };
+
+  const removeFileAt = (idx: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const uploadSelectedFiles = async (): Promise<{ url: string; type: string; filename: string; size: number }[]> => {
+    if (!activeRoom || selectedFiles.length === 0) return [];
+    setIsUploading(true);
+    try {
+      const results: { url: string; type: string; filename: string; size: number }[] = [];
+      for (const file of selectedFiles) {
+        const fd = new FormData();
+        fd.append('roomId', activeRoom);
+        fd.append('file', file);
+        const res = await fetch('/api/storage/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+        results.push({ url: data.url, type: file.type || 'application/octet-stream', filename: file.name, size: file.size });
+      }
+      return results;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const canSend = !isUploading && !isRecording && (editorHasContent() || selectedFiles.length > 0);
+
+  // Determine a supported audio mime type and extension
+  const pickRecorderMime = (): { mime: string; ext: string } | null => {
+    const candidates = [
+      { mime: 'audio/webm;codecs=opus', ext: 'webm' },
+      { mime: 'audio/webm', ext: 'webm' },
+      { mime: 'audio/ogg;codecs=opus', ext: 'ogg' },
+      { mime: 'audio/mp4', ext: 'm4a' },
+      { mime: 'audio/mpeg', ext: 'mp3' },
+    ];
+    for (const c of candidates) {
+      // @ts-ignore (isTypeSupported may not exist in some TS DOM libs)
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(c.mime)) return c;
+    }
+    return null;
+  };
+
+  const startRecording = async () => {
+    setRecordError(null);
+    try {
+      if (isRecording) return;
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setRecordError('Audio recording is not supported in this browser.');
+        return;
+      }
+      const support = pickRecorderMime();
+      if (!support) {
+        setRecordError('No supported audio recording format found in this browser.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      const mr = new MediaRecorder(stream, { mimeType: support.mime } as any);
+      recordedChunksRef.current = [];
+      mr.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        try {
+          const blob = new Blob(recordedChunksRef.current, { type: support.mime });
+          const now = new Date();
+          const ts = now.toISOString().replaceAll(':', '-');
+          const file = new File([blob], `recording-${ts}.${support.ext}`, { type: support.mime, lastModified: Date.now() });
+          addFiles([file] as any);
+        } catch (e:any) {
+          setRecordError(e.message || 'Failed to capture recording');
+        } finally {
+          // Cleanup stream tracks
+          try { recordingStreamRef.current?.getTracks().forEach(t => t.stop()); } catch {}
+          recordingStreamRef.current = null;
+          mediaRecorderRef.current = null;
+          setIsRecording(false);
+        }
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+    } catch (e:any) {
+      setRecordError(e.message || 'Failed to start recording');
+      try { recordingStreamRef.current?.getTracks().forEach(t => t.stop()); } catch {}
+      recordingStreamRef.current = null;
+      mediaRecorderRef.current = null;
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    try { mediaRecorderRef.current?.stop(); } catch {}
+  };
+
   const send = async () => {
     if(!editor || !activeRoom) return;
-    if(!editorHasContent()) return;
-    const html = editor.getHTML();
-    const optimistic: Message = { id: 'temp-'+Date.now(), content: html, createdAt: new Date().toISOString(), sender: { email: session?.user?.email }, type: 'TEXT', pending: true };
-    setMessages(m => [...m, optimistic]);
+    if(!canSend) return;
+
+    const html = editorHasContent() ? editor.getHTML() : '';
+
     try {
-      editor.commands.clearContent();
-      const r = await fetch('/api/chat/messages', { method: 'POST', body: JSON.stringify({ roomId: activeRoom, content: html }), headers: { 'Content-Type': 'application/json' }});
-      if(!r.ok) throw new Error('Send failed');
+      // Upload attachments first (if any)
+      const attachments = await uploadSelectedFiles();
+
+      // Optimistic UI: append a pending message
+      const optimistic: Message = {
+        id: 'temp-' + Date.now(),
+        content: html || undefined,
+        createdAt: new Date().toISOString(),
+        sender: { email: session?.user?.email },
+        type: attachments.length && !html ? 'FILE' : 'TEXT',
+        pending: true,
+        attachments,
+      } as any;
+      setMessages(m => [...m, optimistic]);
+
+      // Clear composer before sending
+      if (html) editor.commands.clearContent();
+      setSelectedFiles([]);
+
+      const r = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: activeRoom, content: html || undefined, attachments: attachments.length ? attachments : undefined }),
+      });
+      const resp = await r.json().catch(() => ({}));
+      if(!r.ok) throw new Error(resp?.error || 'Send failed');
+
+      if (resp?.message) {
+        // Replace the optimistic message with the server-confirmed one to clear pending state immediately
+        setMessages(curr => curr.map(m => m.id === optimistic.id ? resp.message : m));
+      } else {
+        // Fallback: refresh the list
+        const rr = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}`);
+        const dd = await rr.json();
+        if (Array.isArray(dd.messages)) setMessages(dd.messages);
+      }
     } catch (e:any) {
-      setMessages(m => m.map(msg => msg.id === optimistic.id ? { ...msg, pending: false, content: (msg.content || '') + ' (failed)' } : msg));
+      setError(e.message || 'Failed to send');
     }
   };
 
@@ -559,6 +719,59 @@ export default function ChatPage() {
       if (Array.isArray(dd.messages)) setMessages(dd.messages);
     } catch (e:any) { setError(e.message); }
   };
+
+function SelectedAttachmentPreview({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url, setUrl] = useState<string>('');
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => { URL.revokeObjectURL(u); };
+  }, [file]);
+
+  const sizeKB = Math.round(file.size / 1024);
+  const isImage = file.type?.startsWith('image/');
+  const isAudio = file.type?.startsWith('audio/');
+
+  // Images are shown as simple chips (no preview)
+  if (isImage) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1 rounded-md border border-slate-600/60 bg-slate-800/60 text-[11px]">
+        <span className="max-w-[14rem] truncate" title={`${file.name} • ${sizeKB} KB`}>{file.name}</span>
+        <span className="opacity-60">({sizeKB} KB)</span>
+        <button type="button" onClick={onRemove} className="ml-1 px-1 rounded bg-slate-700 hover:bg-slate-600" aria-label={`Remove ${file.name}`} title="Remove file">×</button>
+      </div>
+    );
+  }
+
+  // Audio keeps a small player for usability
+  if (isAudio) {
+    return (
+      <div className="w-full p-2 border border-slate-600/60 bg-slate-800/60 rounded-md">
+        {url ? (
+          <audio controls preload="metadata" crossOrigin="anonymous" className="w-full">
+            <source src={url} type={file.type?.split(';')[0] || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+        ) : (
+          <div className="text-[10px] text-slate-400">Preparing audio…</div>
+        )}
+        <div className="mt-1 flex items-center justify-between text-[10px]">
+          <span className="truncate" title={`${file.name} • ${sizeKB} KB`}>{file.name}</span>
+          <button type="button" onClick={onRemove} className="px-1 rounded bg-slate-700 hover:bg-slate-600" aria-label={`Remove ${file.name}`}>×</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Generic file chip
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 rounded-md border border-slate-600/60 bg-slate-800/60 text-[11px]">
+      <span className="max-w-[14rem] truncate" title={`${file.name} • ${sizeKB} KB`}>{file.name}</span>
+      <span className="opacity-60">({sizeKB} KB)</span>
+      <button type="button" onClick={onRemove} className="ml-1 px-1 rounded bg-slate-700 hover:bg-slate-600" aria-label={`Remove ${file.name}`} title="Remove file">×</button>
+    </div>
+  );
+}
 
   return (
     <div ref={dropRef} className="flex h-screen w-screen overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
@@ -660,8 +873,15 @@ export default function ChatPage() {
                         </div>
                       )}
                       {m.attachments?.length ? (
-                        <div className="grid grid-cols-2 gap-2">
-                          {m.attachments.map(a => (<AttachmentPreview key={a.id || a.url} a={a} />))}
+                        <div className="relative">
+                          <div className="grid grid-cols-2 gap-2">
+                            {m.attachments.map(a => (<AttachmentPreview key={a.id || a.url} a={a} onImageClick={(src: string) => { setViewerSrc(src); setViewerZoom(1); }} />))}
+                          </div>
+                          {m.pending && (
+                            <div className="absolute inset-0 rounded-md bg-black/40 grid place-items-center">
+                              <IconSpinner className="h-6 w-6 text-white" />
+                            </div>
+                          )}
                         </div>
                       ) : null}
                       {m.content && <MessageBody html={m.content} />}
@@ -681,12 +901,62 @@ export default function ChatPage() {
             <footer className="p-4 border-t border-slate-800/70 bg-slate-900/60 backdrop-blur-xl flex flex-col gap-3 relative">
               {(error || recordError) && <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 px-3 py-1 rounded">{error || recordError}</div>}
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2" />
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      if (e.currentTarget.files) addFiles(e.currentTarget.files);
+                      // Reset input so selecting the same file again still triggers change
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-10 w-10 grid place-items-center rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/70"
+                    disabled={isUploading}
+                    title="Attach files"
+                    aria-label="Attach files"
+                  >
+                    <IconPaperclip className="h-4 w-4 text-slate-200" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => isRecording ? stopRecording() : startRecording()}
+                    className={clsx('h-10 w-10 grid place-items-center rounded-lg border', isRecording ? 'bg-rose-700 border-rose-600 hover:bg-rose-600' : 'bg-slate-800 border-slate-700/70 hover:bg-slate-700')}
+                    title={isRecording ? 'Stop recording' : 'Record audio'}
+                    aria-label={isRecording ? 'Stop recording' : 'Record audio'}
+                    disabled={isUploading}
+                  >
+                    {isRecording ? <IconStop className="h-4 w-4 text-white" /> : <IconMic className="h-4 w-4 text-slate-200" />}
+                  </button>
+                  {selectedFiles.length > 0 && (
+                    <span className="text-[11px] text-slate-400">{selectedFiles.length}/{MAX_FILES}</span>
+                  )}
+                </div>
                 <div className="flex-1 min-w-0 flex items-center gap-2">
                   <div className="flex flex-col flex-1 min-w-0 gap-2">
                     <div ref={composerRef} className="rounded-lg bg-slate-800/70 border border-slate-700/70 px-3 py-2 shadow-inner shadow-black/30">
                       {editor && <MenuBar editor={editor} />}
-                      <div className="relative rounded-xl border border-slate-600/60 bg-slate-900/40" style={{ height: composerHeight }}>
+                      <div
+                        className="relative rounded-xl border border-slate-600/60 bg-slate-900/40"
+                        style={{ height: composerHeight }}
+                        onDragOver={(e) => {
+                          // Allow dropping files
+                          if (e.dataTransfer?.types?.includes('Files')) {
+                            e.preventDefault();
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (e.dataTransfer?.files?.length) {
+                            e.preventDefault();
+                            addFiles(e.dataTransfer.files);
+                          }
+                        }}
+                      >
                         <EditorContent
                           editor={editor}
                           className="tiptap resizable-editor h-full px-3 py-2 focus:outline-none focus:ring-0"
@@ -717,6 +987,20 @@ export default function ChatPage() {
                           <IconResizeNS className="h-3.5 w-3.5 text-slate-300" />
                         </button>
                       </div>
+                      {selectedFiles.length > 0 && (
+                        <div className="mt-2 relative">
+<div className="flex flex-wrap gap-2">
+  {selectedFiles.map((f, i) => (
+    <SelectedAttachmentPreview key={i} file={f} onRemove={() => removeFileAt(i)} />
+  ))}
+</div>
+                          {isUploading && (
+                            <div className="absolute inset-0 rounded-md bg-black/50 grid place-items-center">
+                              <IconSpinner className="h-8 w-8 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -731,7 +1015,7 @@ export default function ChatPage() {
                       </button>
                     </>
                   ) : (
-                    <button aria-label="Send" onClick={send} className="h-10 px-4 grid place-items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium shadow-lg shadow-indigo-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={editorEmpty}>
+                    <button aria-label="Send" onClick={send} className="h-10 px-4 grid place-items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium shadow-lg shadow-indigo-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!canSend}>
                       <IconSend className="h-5 w-5 text-white" />
                     </button>
                   )}
@@ -765,6 +1049,52 @@ export default function ChatPage() {
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={()=> setShowModal(false)} className="text-xs px-4 py-2 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/70">Cancel</button>
               <button onClick={createRoom} disabled={!roomName.trim()} className="text-xs px-5 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed shadow shadow-indigo-900/40">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewerSrc && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col">
+          <div className="flex items-center justify-between p-3 text-slate-200">
+            <div className="flex items-center gap-2">
+              <button
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+                onClick={() => setViewerZoom(z => Math.min(5, z + 0.25))}
+                aria-label="Zoom in"
+                title="Zoom in"
+              >
+                <IconPlus className="h-4 w-4" />
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+                onClick={() => setViewerZoom(z => Math.max(0.25, z - 0.25))}
+                aria-label="Zoom out"
+                title="Zoom out"
+              >
+                <IconMinus className="h-4 w-4" />
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+                onClick={() => setViewerZoom(1)}
+                aria-label="Reset zoom"
+                title="Reset zoom"
+              >
+                100%
+              </button>
+            </div>
+            <button
+              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+              onClick={() => setViewerSrc(null)}
+              aria-label="Close"
+              title="Close"
+            >
+              <IconX className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <div className="min-h-full w-full flex items-center justify-center">
+              <img src={viewerSrc} alt="preview" style={{ transform: `scale(${viewerZoom})` }} className="max-w-none select-none" />
             </div>
           </div>
         </div>
@@ -843,16 +1173,19 @@ export default function ChatPage() {
   );
 }
 
-function AttachmentPreview({ a }: { a: any }) {
+function AttachmentPreview({ a, onImageClick }: { a: any; onImageClick?: (src: string) => void }) {
   if(a.type?.startsWith('image/')) return (
     <div className="relative group">
-      <img src={a.url} alt={a.filename} className="max-h-64 rounded-xl object-cover border border-slate-700/70 shadow-md shadow-black/40" />
+      <img src={a.url} alt={a.filename} onClick={() => onImageClick?.(a.url)} className="h-24 w-24 rounded-lg object-cover border border-slate-700/70 shadow-md shadow-black/40 cursor-zoom-in" />
       <span className="absolute bottom-1 right-2 text-[10px] px-2 py-0.5 rounded bg-black/50 backdrop-blur text-slate-200 opacity-0 group-hover:opacity-100 transition">{a.filename}</span>
     </div>
   );
   if(a.type?.startsWith('audio/')) return (
     <div className="w-full">
-      <audio controls src={a.url} className="w-full" />
+      <audio controls preload="metadata" crossOrigin="anonymous" className="w-full">
+        <source src={a.url} type={(a.type || '').split(';')[0] || undefined} />
+        Your browser does not support the audio element.
+      </audio>
       <div className="text-[10px] mt-1 text-slate-400 break-all">{a.filename}</div>
     </div>
   );
@@ -956,5 +1289,44 @@ function IconCheck({ className }: { className?: string }) {
 function IconX({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round"/></svg>
+  );
+}
+function IconPaperclip({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M8 12.5 15.5 5a3.5 3.5 0 1 1 5 5l-8.5 8.5a5 5 0 0 1-7.1-7.1L12 4" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+function IconMic({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="9" y="3" width="6" height="10" rx="3"/>
+      <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
+      <path d="M12 21v-3"/>
+    </svg>
+  );
+}
+function IconStop({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+  );
+}
+function IconPlus({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>
+  );
+}
+function IconMinus({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 12h14" strokeLinecap="round"/></svg>
+  );
+}
+function IconSpinner({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={clsx('animate-spin', className)} fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" className="opacity-25" />
+      <path d="M4 12a8 8 0 0 1 8-8" className="opacity-75" />
+    </svg>
   );
 }
