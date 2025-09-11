@@ -1,0 +1,960 @@
+"use client";
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import clsx from 'clsx';
+import { useEditor, EditorContent } from '@tiptap/react';
+import type { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import Mathematics from '@tiptap/extension-mathematics';
+import * as Popover from '@radix-ui/react-popover';
+import katex from 'katex';
+
+// Local hook replicating the behavior expected by provided MenuBar code
+function useEditorState<T>({ editor, selector }: { editor: Editor; selector: (ctx: { editor: Editor }) => T }): T {
+  const compute = useCallback(() => selector({ editor }), [editor, selector]);
+  const [state, setState] = useState<T>(() => compute());
+  useEffect(() => {
+    if (!editor) return;
+    const update = () => setState(compute());
+    editor.on('update', update);
+    editor.on('selectionUpdate', update);
+    editor.on('transaction', update);
+    return () => {
+      editor.off('update', update);
+      editor.off('selectionUpdate', update);
+      editor.off('transaction', update);
+    };
+  }, [editor, compute]);
+return state;
+}
+
+// Provided MenuBar code inserted verbatim (with local hook)
+function MenuBar({ editor }: { editor: Editor }) {
+  const [latex, setLatex] = useState<string>('x^2');
+
+  // Apply heading to the current block (or selection of blocks)
+  const applyHeading = useCallback((level: 1 | 2 | 3 | 4 | 5 | 6) => {
+    editor.chain().focus().toggleHeading({ level }).run();
+  }, [editor]);
+  const [mathOpen, setMathOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'inline' | 'block'>('inline');
+  const [editExisting, setEditExisting] = useState<null | 'inline' | 'block'>(null);
+  const [editRange, setEditRange] = useState<null | { from: number; to: number }>(null);
+  const previewHtml = useMemo(() => {
+    try {
+      return katex.renderToString(latex || '', { throwOnError: false, displayMode: previewMode === 'block' });
+    } catch {
+      return '';
+    }
+  }, [latex, previewMode]);
+
+  // Listen for clicks on math nodes to open the popover in edit mode
+  useEffect(() => {
+    const onOpen = (e: any) => {
+      const d = e?.detail || {};
+      if (typeof d.latex === 'string') setLatex(d.latex);
+      const m = d.mode === 'block' ? 'block' : 'inline';
+      setPreviewMode(m);
+      setEditExisting(m);
+      if (typeof d.fromPos === 'number' && typeof d.toPos === 'number') {
+        setEditRange({ from: d.fromPos, to: d.toPos });
+      } else {
+        setEditRange(null);
+      }
+      setMathOpen(true);
+    };
+    window.addEventListener('tiptap:open-math-popover', onOpen as EventListener);
+    return () => window.removeEventListener('tiptap:open-math-popover', onOpen as EventListener);
+  }, []);
+
+  // Helper that attempts insertion or edit of math nodes
+  const insertLatex = useCallback((value: string, mode: 'inline' | 'block') => {
+    const anyEditor = editor as any;
+
+    // First, if editing an existing node and we have its range, update in place using extension commands or replace
+    if (editExisting && editRange) {
+      try {
+        const ok = mode === 'inline'
+          ? anyEditor?.chain().focus().updateInlineMath({ latex: value, pos: editRange.from }).run()
+          : anyEditor?.chain().focus().updateBlockMath({ latex: value, pos: editRange.from }).run();
+        if (ok) { setEditExisting(null); setEditRange(null); return true; }
+      } catch {}
+      try {
+        const success = anyEditor?.chain?.().focus().command(({ tr, state, dispatch }: any) => {
+          const { from, to } = editRange;
+          const nodeAtFrom = state.doc.nodeAt(from);
+          if (!nodeAtFrom) return false;
+          const newTypeName = mode === 'block' ? 'blockMath' : 'inlineMath';
+          const nodeType = state.schema.nodes[newTypeName];
+          const newNode = nodeType.create({ ...(nodeAtFrom.attrs || {}), latex: value });
+          if (!newNode) return false;
+          tr.replaceWith(from, to, newNode);
+          dispatch?.(tr);
+          return true;
+        }).run();
+        if (success) { setEditExisting(null); setEditRange(null); return true; }
+      } catch {}
+      setEditExisting(null); setEditRange(null);
+    }
+
+    // 1) Use extension commands
+    try {
+      if (mode === 'inline') {
+        if (anyEditor?.chain().focus().insertInlineMath({ latex: value }).run()) return true;
+      } else {
+        if (anyEditor?.chain().focus().insertBlockMath({ latex: value }).run()) return true;
+      }
+    } catch {}
+
+    // 2) JSON nodes
+    try {
+      if (mode === 'inline') {
+        if (anyEditor.chain().focus().insertContent({ type: 'inlineMath', attrs: { latex: value } }).run()) return true;
+      } else {
+        if (anyEditor.chain().focus().insertContent({ type: 'blockMath', attrs: { latex: value } }).run()) return true;
+      }
+    } catch {}
+
+    // 3) TeX delimiter fallback matching this extension's input rules (inline: $$, block: $$$)
+    if (mode === 'inline') {
+      return anyEditor.chain().focus().insertContent(`$$${value}$$`).run();
+    }
+    return anyEditor.chain().focus().insertContent(`\n$$$${value}$$$\n`).run();
+  }, [editor, editExisting, editRange]);
+
+  // Read the current editor's state, and re-render the component when it changes
+  const editorState = useEditorState({
+    editor,
+    selector: ctx => {
+      return {
+        isBold: ctx.editor.isActive('bold') ?? false,
+        canBold: ctx.editor.can().chain().toggleBold().run() ?? false,
+        isItalic: ctx.editor.isActive('italic') ?? false,
+        canItalic: ctx.editor.can().chain().toggleItalic().run() ?? false,
+        isStrike: ctx.editor.isActive('strike') ?? false,
+        canStrike: ctx.editor.can().chain().toggleStrike().run() ?? false,
+        isCode: ctx.editor.isActive('code') ?? false,
+        canCode: ctx.editor.can().chain().toggleCode().run() ?? false,
+        canClearMarks: ctx.editor.can().chain().unsetAllMarks().run() ?? false,
+        isParagraph: ctx.editor.isActive('paragraph') ?? false,
+        isHeading1: ctx.editor.isActive('heading', { level: 1 }) ?? false,
+        isHeading2: ctx.editor.isActive('heading', { level: 2 }) ?? false,
+        isHeading3: ctx.editor.isActive('heading', { level: 3 }) ?? false,
+        isHeading4: ctx.editor.isActive('heading', { level: 4 }) ?? false,
+        isHeading5: ctx.editor.isActive('heading', { level: 5 }) ?? false,
+        isHeading6: ctx.editor.isActive('heading', { level: 6 }) ?? false,
+        isBulletList: ctx.editor.isActive('bulletList') ?? false,
+        isOrderedList: ctx.editor.isActive('orderedList') ?? false,
+        isCodeBlock: ctx.editor.isActive('codeBlock') ?? false,
+        isBlockquote: ctx.editor.isActive('blockquote') ?? false,
+        canUndo: ctx.editor.can().chain().undo().run() ?? false,
+        canRedo: ctx.editor.can().chain().redo().run() ?? false,
+      }
+    },
+  })
+
+  return (
+    <div className="control-group">
+      <div className="button-group flex flex-wrap gap-1 mb-2 text-xs relative z-10">
+        <button title="Bold" aria-label="Bold"
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          disabled={!editorState.canBold}
+          className={clsx('p-2 rounded border', editorState.isBold && 'bg-indigo-600 text-white')}
+        >
+          <IconBold className="h-4 w-4" />
+        </button>
+        <button title="Italic" aria-label="Italic"
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          disabled={!editorState.canItalic}
+          className={clsx('p-2 rounded border', editorState.isItalic && 'bg-indigo-600 text-white')}
+        >
+          <IconItalic className="h-4 w-4" />
+        </button>
+        <button title="Strike" aria-label="Strike"
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          disabled={!editorState.canStrike}
+          className={clsx('p-2 rounded border', editorState.isStrike && 'bg-indigo-600 text-white')}
+        >
+          <IconStrikethrough className="h-4 w-4" />
+        </button>
+        <button title="Code" aria-label="Code"
+          onClick={() => editor.chain().focus().toggleCode().run()}
+          disabled={!editorState.canCode}
+          className={clsx('p-2 rounded border', editorState.isCode && 'bg-indigo-600 text-white')}
+        >
+          <IconCode className="h-4 w-4" />
+        </button>
+        <button title="Paragraph" aria-label="Paragraph"
+          onClick={() => editor.chain().focus().setParagraph().run()}
+          className={clsx('p-2 rounded border', editorState.isParagraph && 'bg-indigo-600 text-white')}
+        >
+          <IconPilcrow className="h-4 w-4" />
+        </button>
+        <button title="H1" aria-label="Heading 1"
+          onClick={() => applyHeading(1)}
+          className={clsx('p-2 rounded border', editorState.isHeading1 && 'bg-indigo-600 text-white')}
+        >
+          <span className="text-[10px] font-semibold">H1</span>
+        </button>
+        <button title="H2" aria-label="Heading 2"
+          onClick={() => applyHeading(2)}
+          className={clsx('p-2 rounded border', editorState.isHeading2 && 'bg-indigo-600 text-white')}
+        >
+          <span className="text-[10px] font-semibold">H2</span>
+        </button>
+        <button title="H3" aria-label="Heading 3"
+          onClick={() => applyHeading(3)}
+          className={clsx('p-2 rounded border', editorState.isHeading3 && 'bg-indigo-600 text-white')}
+        >
+          <span className="text-[10px] font-semibold">H3</span>
+        </button>
+        <button title="H4" aria-label="Heading 4"
+          onClick={() => applyHeading(4)}
+          className={clsx('p-2 rounded border', editorState.isHeading4 && 'bg-indigo-600 text-white')}
+        >
+          <span className="text-[10px] font-semibold">H4</span>
+        </button>
+        <button title="Bulleted list" aria-label="Bulleted list"
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          className={clsx('p-2 rounded border', editorState.isBulletList && 'bg-indigo-600 text-white')}
+        >
+          <IconListBullet className="h-4 w-4" />
+        </button>
+        <button title="Ordered list" aria-label="Ordered list"
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          className={clsx('p-2 rounded border', editorState.isOrderedList && 'bg-indigo-600 text-white')}
+        >
+          <IconListOrdered className="h-4 w-4" />
+        </button>
+        <button title="Code block" aria-label="Code block"
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          className={clsx('p-2 rounded border', editorState.isCodeBlock && 'bg-indigo-600 text-white')}
+        >
+          <IconBraces className="h-4 w-4" />
+        </button>
+        <button title="Quote" aria-label="Blockquote"
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          className={clsx('p-2 rounded border', editorState.isBlockquote && 'bg-indigo-600 text-white')}
+        >
+          <IconQuote className="h-4 w-4" />
+        </button>
+        <button title="Horizontal rule" aria-label="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()} className="p-2 rounded border"><IconHR className="h-4 w-4" /></button>
+        <button title="Hard break" aria-label="Hard break" onClick={() => editor.chain().focus().setHardBreak().run()} className="p-2 rounded border"><IconReturn className="h-4 w-4" /></button>
+        <button title="Undo" aria-label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editorState.canUndo} className="p-2 rounded border disabled:opacity-50"><IconUndo className="h-4 w-4" /></button>
+        <button title="Redo" aria-label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editorState.canRedo} className="p-2 rounded border disabled:opacity-50"><IconRedo className="h-4 w-4" /></button>
+      {/* Math popover for entering LaTeX with live preview */}
+      <Popover.Root open={mathOpen} onOpenChange={setMathOpen}>
+        <Popover.Trigger asChild>
+          <button type="button" onClick={() => setMathOpen((v) => !v)} className="p-2 rounded border" title="Math" aria-label="Math"><IconMath className="h-4 w-4" /></button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content side="top" align="start" sideOffset={6} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">Insert LaTeX</div>
+          <input
+            autoFocus
+            value={latex}
+            onChange={(e) => setLatex(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                insertLatex(latex.trim(), 'inline');
+                setMathOpen(false);
+              } else if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault();
+                insertLatex(latex.trim(), 'block');
+                setMathOpen(false);
+              }
+            }}
+            placeholder="e.g. x^2 + y^2 = z^2"
+            className="w-full rounded bg-slate-800/70 border border-slate-700/70 px-2 py-1 text-sm focus:outline-none focus:ring-0"
+          />
+          <div className="text-[10px] text-slate-500">Cmd/Ctrl+Enter inserts inline, Shift+Enter inserts block</div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPreviewMode('inline')}
+              className={clsx('text-[11px] px-2 py-1 rounded border', previewMode === 'inline' ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/60 border-slate-700/70')}
+            >
+              Preview: Inline
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewMode('block')}
+              className={clsx('text-[11px] px-2 py-1 rounded border', previewMode === 'block' ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/60 border-slate-700/70')}
+            >
+              Preview: Block
+            </button>
+          </div>
+          <div className="rounded-md bg-slate-800/50 border border-slate-700/70 p-2 min-h-10 overflow-x-auto">
+            <div className="text-sm katex-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => { insertLatex(latex.trim(), 'inline'); setMathOpen(false); }}
+              className="flex-1 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500"
+            >
+              Insert Inline
+            </button>
+            <button
+              onClick={() => { insertLatex(latex.trim(), 'block'); setMathOpen(false); }}
+              className="flex-1 text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+            >
+              Insert Block
+            </button>
+          </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
+  </div>
+  )
+}
+
+function MessageBody({ html }: { html?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const root = ref.current;
+    // Render inline math
+    const inlineEls = root.querySelectorAll('span[data-type="inline-math"]');
+    inlineEls.forEach((el) => {
+      const latex = (el as HTMLElement).getAttribute('data-latex') || '';
+      try { katex.render(latex, el as HTMLElement, { throwOnError: false, displayMode: false }); } catch {}
+    });
+    // Render block math
+    const blockEls = root.querySelectorAll('div[data-type="block-math"]');
+    blockEls.forEach((el) => {
+      const latex = (el as HTMLElement).getAttribute('data-latex') || '';
+      try { katex.render(latex, el as HTMLElement, { throwOnError: false, displayMode: true }); } catch {}
+    });
+  });
+  if (!html) return null;
+  return <div ref={ref} className="prose prose-invert max-w-none text-sm break-words" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+interface Room { id: string; name: string; _count?: { messages: number }; }
+interface Message { id: string; content?: string; createdAt: string; sender: any; attachments?: any[]; type: string; pending?: boolean; }
+interface User { id: string; email: string; }
+
+export default function ChatPage() {
+  const { data: session } = useSession();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [composerHeight, setComposerHeight] = useState<number>(56);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [activeRoom, setActiveRoom] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [editorEmpty, setEditorEmpty] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roomMembers, setRoomMembers] = useState<User[]>([]);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState('');
+  const [roomName, setRoomName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // File uploads removed
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const dropRef = useRef<HTMLDivElement | null>(null);
+  const meId = useMemo(() => session?.user?.id ?? null, [session?.user?.id]);
+  // Audio + emoji removed
+  const [recordError] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Mathematics.configure({
+        inlineOptions: {
+          onClick: (node: any, pos: number) => {
+            const latex = (node?.attrs?.latex ?? '').toString();
+            window.dispatchEvent(new CustomEvent('tiptap:open-math-popover', { detail: { latex, mode: 'inline', fromPos: pos, toPos: pos + node.nodeSize } }));
+          },
+        },
+        blockOptions: {
+          onClick: (node: any, pos: number) => {
+            const latex = (node?.attrs?.latex ?? '').toString();
+            window.dispatchEvent(new CustomEvent('tiptap:open-math-popover', { detail: { latex, mode: 'block', fromPos: pos, toPos: pos + node.nodeSize } }));
+          },
+        },
+      }),
+    ],
+    content: '',
+    immediatelyRender: false,
+  });
+
+  // Helper: does the editor contain any meaningful content (text or math nodes)?
+  const editorHasContent = useCallback(() => {
+    try {
+      if (!editor) return false;
+      const json: any = editor.getJSON();
+      let found = false;
+      const walk = (node: any) => {
+        if (!node || found) return;
+        if (node.type === 'inlineMath' || node.type === 'blockMath') { found = true; return; }
+        if (node.type === 'text' && typeof node.text === 'string' && node.text.trim().length > 0) { found = true; return; }
+        if (Array.isArray(node.content)) node.content.forEach(walk);
+      };
+      walk(json);
+      return found;
+    } catch { return false; }
+  }, [editor]);
+
+  // Keep send button state in sync with editor content
+  useEffect(() => {
+    if (!editor) return;
+    const updateEmpty = () => { setEditorEmpty(!editorHasContent()); };
+    updateEmpty();
+    editor.on('update', updateEmpty);
+    editor.on('selectionUpdate', updateEmpty);
+    return () => {
+      editor.off('update', updateEmpty);
+      editor.off('selectionUpdate', updateEmpty);
+    };
+  }, [editor, editorHasContent]);
+
+  // (Original inline MenuBar removed; using provided MenuBar above)
+
+  // Fetch rooms
+  useEffect(() => {
+    const load = async () => {
+      setRoomsLoading(true); setError(null);
+      try {
+        const r = await fetch('/api/chat/rooms');
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Failed to load rooms');
+        const list: Room[] = Array.isArray(d.rooms) ? d.rooms.filter(Boolean) : [];
+        setRooms(list);
+        if (list.length && !activeRoom) setActiveRoom(list[0].id);
+      } catch (e: any) { setError(e.message); }
+      finally { setRoomsLoading(false); }
+    };
+    load();
+  }, []);
+
+  // Fetch users when modal opens
+  useEffect(() => { if(showModal) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [showModal]);
+  // Also fetch users when manage members modal opens
+  useEffect(() => { if(manageOpen) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [manageOpen]);
+
+  // Load messages + SSE subscription
+  useEffect(() => {
+    if(!activeRoom) { setMessages([]); setRoomMembers([]); return; }
+    setMessagesLoading(true); setError(null);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [r1, r2] = await Promise.all([
+          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}`),
+          fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`),
+        ]);
+        const d1 = await r1.json();
+        const d2 = await r2.json();
+        if(!r1.ok) throw new Error(d1.error || 'Failed to load messages');
+        if(!r2.ok) throw new Error(d2.error || 'Failed to load room');
+        if (!cancelled) {
+          setMessages(Array.isArray(d1.messages) ? d1.messages : []);
+          setRoomMembers(Array.isArray(d2.room?.members) ? d2.room.members : []);
+        }
+      } catch (e: any) { if(!cancelled) setError(e.message); }
+      finally { if(!cancelled) setMessagesLoading(false); }
+    };
+    load();
+
+    // Tear down previous SSE
+    if (esRef.current) { esRef.current.close(); }
+    const es = new EventSource(`/api/chat/events?roomId=${encodeURIComponent(activeRoom)}`);
+    esRef.current = es;
+    es.addEventListener('message', async () => {
+      // Incremental improvement: ideally fetch only the new message.
+      const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}`);
+      const d = await r.json();
+      if (Array.isArray(d.messages)) setMessages(d.messages);
+    });
+    es.onerror = () => { /* silent reconnect by browser */ };
+
+    return () => { cancelled = true; es.close(); };
+  }, [activeRoom]);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const toggleMember = (id: string) => { setSelectedMembers(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
+
+  const createRoom = async () => {
+    if(!roomName.trim()) return;
+    setError(null);
+    try {
+      const res = await fetch('/api/chat/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: roomName.trim(), memberIds: Array.from(selectedMembers) }) });
+      const data = await res.json();
+      if(!res.ok || !data.room) throw new Error(data.error || 'Failed to create room');
+      setRooms(r => [data.room, ...r]);
+      setActiveRoom(data.room.id);
+      setShowModal(false); setRoomName(''); setSelectedMembers(new Set());
+      if (data.missingMembers?.length) {
+        setError(`Skipped ${data.missingMembers.length} unknown member(s).`);
+      }
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const send = async () => {
+    if(!editor || !activeRoom) return;
+    if(!editorHasContent()) return;
+    const html = editor.getHTML();
+    const optimistic: Message = { id: 'temp-'+Date.now(), content: html, createdAt: new Date().toISOString(), sender: { email: session?.user?.email }, type: 'TEXT', pending: true };
+    setMessages(m => [...m, optimistic]);
+    try {
+      editor.commands.clearContent();
+      const r = await fetch('/api/chat/messages', { method: 'POST', body: JSON.stringify({ roomId: activeRoom, content: html }), headers: { 'Content-Type': 'application/json' }});
+      if(!r.ok) throw new Error('Send failed');
+    } catch (e:any) {
+      setMessages(m => m.map(msg => msg.id === optimistic.id ? { ...msg, pending: false, content: (msg.content || '') + ' (failed)' } : msg));
+    }
+  };
+
+  const activeRoomObj = rooms.find(r => r.id === activeRoom) || null;
+
+  const withinWindow = (createdAt: string) => (Date.now() - new Date(createdAt).getTime()) <= 10 * 60 * 1000;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const startEdit = (m: Message) => {
+    setEditingId(m.id);
+    setEditValue(m.content || '');
+    try {
+      editor?.commands.setContent(m.content || '');
+      setTimeout(() => editor?.commands.focus('end'), 0);
+      composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } catch {}
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue('');
+    try { editor?.commands.clearContent(); } catch {}
+  };
+  const saveEdit = async () => {
+    if (!editingId || !editor) return;
+    try {
+      const newHtml = editor.getHTML();
+      const r = await fetch('/api/chat/message', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingId, content: newHtml })});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to edit');
+      setEditingId(null); setEditValue('');
+      editor.commands.clearContent();
+      // Refresh messages
+      const rr = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom!)}`);
+      const dd = await rr.json();
+      if (Array.isArray(dd.messages)) setMessages(dd.messages);
+    } catch (e:any) { setError(e.message); }
+  };
+  const removeMessage = async (id: string) => {
+    try {
+      const r = await fetch(`/api/chat/message?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to delete');
+      // Refresh
+      const rr = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom!)}`);
+      const dd = await rr.json();
+      if (Array.isArray(dd.messages)) setMessages(dd.messages);
+    } catch (e:any) { setError(e.message); }
+  };
+
+  return (
+    <div ref={dropRef} className="flex h-screen w-screen overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
+      {/* Mobile overlay trigger */}
+      <div className="md:hidden absolute top-2 left-2 z-40">
+        <button onClick={()=> setSidebarOpen(o=>!o)} className="px-3 py-2 rounded-md bg-slate-800/70 backdrop-blur border border-slate-700 text-xs font-medium shadow hover:bg-slate-700/70">{sidebarOpen ? 'Close' : 'Rooms'}</button>
+    </div>
+      {/* Sidebar */}
+      <aside className={clsx('flex flex-col shrink-0 w-80 h-full border-r border-slate-800/70 backdrop-blur-xl bg-slate-900/40 transition-transform duration-300', 'md:translate-x-0', sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0')}>
+        <div className="p-4 flex items-center justify-between border-b border-slate-800/70">
+          <h2 className="font-semibold tracking-wide text-[11px] uppercase text-slate-300">Chats</h2>
+          <button className="text-[11px] px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 border border-slate-600/70" onClick={()=> setShowModal(true)}>New</button>
+        </div>
+        <div className="relative flex-1 overflow-y-auto custom-scroll pb-10">
+          {roomsLoading && <div className="p-4 text-xs text-slate-500 animate-pulse">Loading rooms…</div>}
+          {!roomsLoading && !rooms.length && <div className="p-4 text-xs text-slate-500">No rooms yet.</div>}
+          <ul className="py-2 space-y-1">
+            {rooms.map(r => (
+              <li key={r.id}>
+                <button onClick={()=> { setActiveRoom(r.id); setSidebarOpen(false); }} className={clsx('group w-full text-left px-4 py-3 flex flex-col gap-1 border-l-2 transition-all duration-200', activeRoom===r.id ? 'bg-slate-800/70 border-indigo-400 shadow-inner shadow-indigo-900/30' : 'border-transparent hover:bg-slate-800/40')}> 
+                  <span className="font-medium text-sm truncate group-hover:text-indigo-300/90">{r.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+
+      {/* Main Chat Area */}
+  <section className="flex-1 flex flex-col h-full min-w-0">
+        {!activeRoomObj && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-slate-500">
+            <p className="text-sm">Select or create a room to start chatting.</p>
+            <button onClick={()=> setShowModal(true)} className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-sm font-medium shadow">Create Room</button>
+          </div>
+        )}
+        {activeRoomObj && (
+          <>
+            <header className="h-14 flex items-center justify-between px-5 border-b border-slate-800/70 bg-slate-900/60 backdrop-blur-xl">
+              <div className="flex flex-col">
+                <h1 className="font-semibold text-sm leading-tight">{activeRoomObj.name}</h1>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                {messagesLoading && <span className="animate-pulse">Loading…</span>}
+                <button
+                  className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-[11px]"
+                  onClick={() => { setManageOpen(true); }}
+                >
+                  Members • {roomMembers.length}
+                </button>
+              </div>
+            </header>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-3 md:space-y-4 custom-scroll" onClick={()=> setOpenMenuId(null)}>
+              {messages.map(m => {
+                const mine = m.sender?.id ? (m.sender.id === meId) : (m.sender?.email && m.sender.email === session?.user?.email);
+                const showActions = mine && withinWindow(m.createdAt);
+                const menuOpen = openMenuId === m.id;
+                return (
+                  <div key={m.id} className={clsx('flex w-full overflow-visible', mine ? 'justify-end' : 'justify-start')}>
+                    <div
+                      className={clsx(
+                        'group relative max-w-[82%] md:max-w-[68%] rounded-2xl px-4 py-2 text-sm shadow/20 shadow-black/40 flex flex-col gap-2 ring-1 ring-transparent transition-all z-0',
+                        menuOpen ? 'z-50' : 'z-0',
+                        mine ? 'bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 text-white backdrop-blur ring-indigo-400/0 group-hover:ring-indigo-300/40' : 'bg-slate-800/70 backdrop-blur ring-slate-700/80 group-hover:ring-slate-500/50'
+                      )}
+                      title={new Date(m.createdAt).toLocaleString()}
+                    >
+                      {showActions && (
+                        <div className={clsx('absolute top-1', mine ? 'right-2' : 'left-2')}>
+                          <button
+                            aria-label="Message options"
+                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(id => id === m.id ? null : m.id); }}
+                            className="h-6 w-6 grid place-items-center rounded-full bg-black/20 hover:bg-black/30 text-slate-200 opacity-0 group-hover:opacity-100 transition"
+                          >
+                            ⋯
+                          </button>
+          {openMenuId === m.id && (
+                            <div
+                              className={clsx(
+            'absolute mt-1 w-28 rounded-md border border-slate-700/70 bg-slate-900/95 shadow-xl shadow-black/50 overflow-hidden z-[60]',
+                                mine ? 'right-0' : 'left-0'
+                              )}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                className="w-full text-left text-xs px-3 py-2 hover:bg-slate-800"
+                                onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); startEdit(m); }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="w-full text-left text-xs px-3 py-2 hover:bg-slate-800 text-rose-300"
+                                onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); removeMessage(m.id); }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {m.attachments?.length ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {m.attachments.map(a => (<AttachmentPreview key={a.id || a.url} a={a} />))}
+                        </div>
+                      ) : null}
+                      {m.content && <MessageBody html={m.content} />}
+                      <div className={clsx('flex gap-2 items-center', mine ? 'justify-end' : 'justify-start')}>
+                        {m.pending && <span className="text-[10px] text-yellow-200/90">sending…</span>}
+                        <span className={clsx('text-[10px] tracking-wide uppercase opacity-0 group-hover:opacity-100 transition', mine ? 'text-indigo-100/80' : 'text-slate-400/80')}>
+                          {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {!messagesLoading && !messages.length && <div className="text-xs text-slate-500">No messages yet. Start the conversation.</div>}
+              <div ref={bottomRef} />
+            </div>
+            <footer className="p-4 border-t border-slate-800/70 bg-slate-900/60 backdrop-blur-xl flex flex-col gap-3 relative">
+              {(error || recordError) && <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 px-3 py-1 rounded">{error || recordError}</div>}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2" />
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <div className="flex flex-col flex-1 min-w-0 gap-2">
+                    <div ref={composerRef} className="rounded-lg bg-slate-800/70 border border-slate-700/70 px-3 py-2 shadow-inner shadow-black/30">
+                      {editor && <MenuBar editor={editor} />}
+                      <div className="relative rounded-xl border border-slate-600/60 bg-slate-900/40" style={{ height: composerHeight }}>
+                        <EditorContent
+                          editor={editor}
+                          className="tiptap resizable-editor h-full px-3 py-2 focus:outline-none focus:ring-0"
+                        />
+                        <button
+                          type="button"
+                          title="Resize editor"
+                          aria-label="Resize editor"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            const startY = e.clientY;
+                            const startH = composerHeight;
+                            const onMove = (ev: MouseEvent) => {
+                              const delta = ev.clientY - startY;
+                              // Top-right handle semantics: drag down reduces height, drag up increases height
+                              const nh = Math.max(56, Math.min(startH - delta, Math.floor(window.innerHeight * 0.6)));
+                              setComposerHeight(nh);
+                            };
+                            const onUp = () => {
+                              document.removeEventListener('mousemove', onMove);
+                              document.removeEventListener('mouseup', onUp);
+                            };
+                            document.addEventListener('mousemove', onMove);
+                            document.addEventListener('mouseup', onUp);
+                          }}
+                          className="absolute top-1 right-1 w-5 h-5 grid place-items-center rounded-md border border-slate-600/70 bg-slate-700/50 hover:bg-slate-600/70 cursor-ns-resize"
+                        >
+                          <IconResizeNS className="h-3.5 w-3.5 text-slate-300" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {editingId ? (
+                    <>
+                      <button aria-label="Save edit" onClick={saveEdit} className="h-10 px-4 grid place-items-center rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium shadow-lg shadow-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={editorEmpty}>
+                        <IconCheck className="h-5 w-5 text-white" />
+                      </button>
+                      <button aria-label="Cancel edit" onClick={cancelEdit} className="h-10 px-4 grid place-items-center rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
+                        <IconX className="h-5 w-5 text-white" />
+                      </button>
+                    </>
+                  ) : (
+                    <button aria-label="Send" onClick={send} className="h-10 px-4 grid place-items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium shadow-lg shadow-indigo-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={editorEmpty}>
+                      <IconSend className="h-5 w-5 text-white" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </footer>
+          </>
+        )}
+      </section>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900/90 border border-slate-700/70 p-6 space-y-5 shadow-2xl shadow-black/60">
+            <h3 className="text-sm font-semibold tracking-wide uppercase text-slate-300">Create Room</h3>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] uppercase tracking-wider text-slate-400">Room Name</label>
+                <input value={roomName} onChange={e=> setRoomName(e.target.value)} placeholder="Team Sync" className="w-full rounded-md bg-slate-800/70 border border-slate-700/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60" />
+              </div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scroll pr-1">
+                <label className="text-[11px] uppercase tracking-wider text-slate-400">Members</label>
+                {users.filter(u=> u.id !== session?.user?.id).map(u=> {
+                  const active = selectedMembers.has(u.id);
+                  return (
+                    <button key={u.id} type="button" onClick={()=> toggleMember(u.id)} className={clsx('w-full flex items-center justify-between rounded-md px-3 py-2 text-xs border transition shadow-sm', active ? 'bg-indigo-600/70 border-indigo-400 text-white shadow-indigo-900/40' : 'bg-slate-800/50 border-slate-700/70 hover:bg-slate-800/80')}>{u.email}<span className="opacity-70">{active ? 'Added' : 'Add'}</span></button>
+                  );
+                })}
+                {!users.length && <div className="text-[11px] text-slate-500">Loading users...</div>}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={()=> setShowModal(false)} className="text-xs px-4 py-2 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/70">Cancel</button>
+              <button onClick={createRoom} disabled={!roomName.trim()} className="text-xs px-5 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed shadow shadow-indigo-900/40">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {manageOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900/90 border border-slate-700/70 p-6 space-y-5 shadow-2xl shadow-black/60">
+            <h3 className="text-sm font-semibold tracking-wide uppercase text-slate-300">Manage Members</h3>
+
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">Current Members</div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scroll pr-1">
+                {roomMembers.map(m => (
+                  <div key={m.id} className="w-full flex items-center justify-between rounded-md px-3 py-2 text-xs border border-slate-700/70 bg-slate-800/50">
+                    <span className="truncate mr-2">{m.email || m.id}</span>
+                    <button className="px-2 py-1 rounded bg-rose-700/80 hover:bg-rose-600 text-white"
+                      onClick={async ()=>{
+                        try {
+                          const r = await fetch('/api/chat/room', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom, addIds: [], removeIds: [m.id] })});
+                          const d = await r.json();
+                          if(!r.ok) throw new Error(d.error || 'Failed to remove');
+                          setRoomMembers(Array.isArray(d.room?.members) ? d.room.members : []);
+                        } catch(e:any) { setError(e.message); }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {!roomMembers.length && <div className="text-[11px] text-slate-500">No members</div>}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">Add New Member</div>
+              <input value={addQuery} onChange={(e)=> setAddQuery(e.target.value)} placeholder="Search users…" className="w-full rounded bg-slate-800/70 border border-slate-700/70 px-2 py-1 text-sm focus:outline-none focus:ring-0" />
+              <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scroll pr-1">
+                {users
+                  .filter(u => u.id !== session?.user?.id)
+                  .filter(u => !roomMembers.some(m => m.id === u.id))
+                  .filter(u => {
+                    const q = addQuery.trim().toLowerCase();
+                    if (!q) return true;
+                    const t = (u.email || u.id).toLowerCase();
+                    return t.includes(q);
+                  })
+                  .map(u => (
+                    <div key={u.id} className="w-full flex items-center justify-between rounded-md px-3 py-2 text-xs border border-slate-700/70 bg-slate-800/50">
+                      <span className="truncate mr-2">{u.email || u.id}</span>
+                      <button className="px-2 py-1 rounded bg-emerald-700/80 hover:bg-emerald-600 text-white"
+                        onClick={async ()=>{
+                          try {
+                            const r = await fetch('/api/chat/room', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom, addIds: [u.id], removeIds: [] })});
+                            const d = await r.json();
+                            if(!r.ok) throw new Error(d.error || 'Failed to add');
+                            setRoomMembers(Array.isArray(d.room?.members) ? d.room.members : []);
+                          } catch(e:any) { setError(e.message); }
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))}
+                {!users.length && <div className="text-[11px] text-slate-500">Loading users...</div>}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button onClick={()=> setManageOpen(false)} className="text-xs px-4 py-2 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/70">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttachmentPreview({ a }: { a: any }) {
+  if(a.type?.startsWith('image/')) return (
+    <div className="relative group">
+      <img src={a.url} alt={a.filename} className="max-h-64 rounded-xl object-cover border border-slate-700/70 shadow-md shadow-black/40" />
+      <span className="absolute bottom-1 right-2 text-[10px] px-2 py-0.5 rounded bg-black/50 backdrop-blur text-slate-200 opacity-0 group-hover:opacity-100 transition">{a.filename}</span>
+    </div>
+  );
+  if(a.type?.startsWith('audio/')) return (
+    <div className="w-full">
+      <audio controls src={a.url} className="w-full" />
+      <div className="text-[10px] mt-1 text-slate-400 break-all">{a.filename}</div>
+    </div>
+  );
+  return <a href={a.url} target="_blank" rel="noopener" className="text-xs underline break-all text-indigo-200 hover:text-indigo-100">{a.filename || a.url}</a>;
+}
+
+function IconSend({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M22 2 11 13" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="m22 2-7 20-4-9-9-4 20-7Z" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconBold({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M7 4h6.5a3.5 3.5 0 0 1 0 7H7V4zm0 9h7a3.5 3.5 0 1 1 0 7H7v-7z"/></svg>
+  );
+}
+function IconItalic({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M10 4h8v2h-3.8l-4.4 12H16v2H8v-2h3.8l4.4-12H10V4z"/></svg>
+  );
+}
+function IconStrikethrough({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M4 11h16v2H4v-2zm6.5 6c0 1 .8 2 2.5 2s2.5-1 2.5-2-.7-1.6-2.4-2.2l-1.1-.4c-2.5-.8-3.9-2-3.9-4.2h2.3c0 1.2.7 1.9 2.6 2.5l1 .3c2.8.9 4 2.1 4 4.1 0 2.2-1.8 4-4.8 4S8.5 19.9 8.5 18h2z"/></svg>
+  );
+}
+function IconCode({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 16 4 12l4-4" strokeLinecap="round" strokeLinejoin="round"/><path d="m16 8 4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
+}
+function IconPilcrow({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M10 4h2v16h-2V4zm6 0h2v16h-2V4zM8 10a4 4 0 1 0 0 8h2v-8H8z"/></svg>
+  );
+}
+function IconListBullet({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><circle cx="5" cy="6" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="5" cy="18" r="1.5"/><path d="M10 6h10v2H10zM10 12h10v2H10zM10 18h10v2H10z"/></svg>
+  );
+}
+function IconListOrdered({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M4 6h2V4H3v2h1zM3 12h3v-2H3v2zm0 6h3v-2H3v2z"/><path d="M10 6h10v2H10zM10 12h10v2H10zM10 18h10v2H10z"/></svg>
+  );
+}
+function IconBraces({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 3c-2 0-3 1-3 3v3c0 1-1 2-2 2 1 0 2 1 2 2v3c0 2 1 3 3 3"/><path d="M15 3c2 0 3 1 3 3v3c0 1 1 2 2 2-1 0-2 1-2 2v3c0 2-1 3-3 3"/></svg>
+  );
+}
+function IconQuote({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M5 7h7v6H8v4H5V7zm9 0h7v6h-4v4h-3V7z"/></svg>
+  );
+}
+function IconHR({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor"><rect x="4" y="11" width="16" height="2"/></svg>
+  );
+}
+function IconReturn({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 7v6a3 3 0 0 1-3 3H6" strokeLinecap="round"/><path d="M9 10 6 13l3 3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
+}
+function IconUndo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 7 5 11l4 4" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 11h9a5 5 0 1 1 0 10h-3" strokeLinecap="round"/></svg>
+  );
+}
+function IconRedo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 7 19 11l-4 4" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 11H10a5 5 0 1 0 0 10h3" strokeLinecap="round"/></svg>
+  );
+}
+function IconMath({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M8 7l8 10M8 17l8-10"/></svg>
+  );
+}
+function IconResizeNS({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M12 3v8" strokeLinecap="round"/>
+      <path d="M9 6l3-3 3 3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 21v-8" strokeLinecap="round"/>
+      <path d="M9 18l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+function IconCheck({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
+}
+function IconX({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round"/></svg>
+  );
+}

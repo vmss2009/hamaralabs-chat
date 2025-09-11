@@ -34,3 +34,47 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Chat Feature (Added)
+
+### Overview
+A real-time multi-room chat with file & image uploads (S3), SSE-driven live updates, and Prisma-backed persistence.
+
+### Data Model
+- User
+- ChatRoom (name, members, lastMessageAt)
+- Message (content, type, attachments)
+- Attachment (url, type, filename, size)
+
+### Setup Steps
+1. Apply new Prisma schema changes:
+```bash
+npx prisma migrate dev --name chat_feature
+npx prisma generate
+```
+2. Ensure env vars for S3:
+```
+S3_ENDPOINT=...
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_PUBLIC_URL=... # public base if different from endpoint
+```
+3. Start dev server:
+```bash
+npm run dev
+```
+4. Login then navigate to `/protected/chat`.
+
+### Uploads
+Files are uploaded to bucket `chat` under key `<roomId>/<timestamp>-<filename>`.
+
+### Realtime
+Currently uses an in-memory EventEmitter + Server Sent Events. Scale suggestion: replace with Redis pub/sub or Socket.IO adapter.
+
+### Next Improvements
+- Typing indicators
+- Read receipts
+- Infinite scroll (pagination already supported via cursor in API)
+- Message editing & deletion
+- Presence (online/offline)
+- Better error & retry handling
