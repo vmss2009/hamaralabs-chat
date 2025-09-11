@@ -627,7 +627,7 @@ export default function ChatPage() {
     const load = async () => {
       try {
         const [r1, r2] = await Promise.all([
-          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=10`),
+          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`),
           fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`),
         ]);
         const d1 = await r1.json();
@@ -651,7 +651,7 @@ export default function ChatPage() {
     esRef.current = es;
     es.addEventListener('message', async () => {
       try {
-        const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=10`);
+        const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`);
         const d = await r.json();
         if (Array.isArray(d.messages)) {
           setMessages(curr => {

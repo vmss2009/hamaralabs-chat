@@ -4,7 +4,7 @@ import { chatBus } from './realtime';
 export async function listMessages(roomId: string, cursor?: string, takeParam?: number) {
   // Default page size is 30 if not specified; bound between 1 and 50
   const take = Math.min(50, Math.max(1, Number.isFinite(takeParam as number) ? (takeParam as number) : 30));
-  const messages = await prisma.message.findMany({
+  const rows = await prisma.message.findMany({
     where: { chatRoomId: roomId },
     orderBy: { createdAt: 'desc' },
     take,
@@ -12,8 +12,10 @@ export async function listMessages(roomId: string, cursor?: string, takeParam?: 
     cursor: cursor ? { id: cursor } : undefined,
     include: { attachments: true, sender: true }
   });
-  // We return messages in chronological order; nextCursor points to the oldest item in this page
-  return { messages: messages.reverse(), nextCursor: messages.length === take ? messages[messages.length - 1].id : null };
+  // Return chronological order; nextCursor must point to the oldest item in THIS page.
+  const nextCursor = rows.length === take ? rows[rows.length - 1].id : null;
+  const messages = rows.reverse();
+  return { messages, nextCursor };
 }
 
 export async function sendMessage(roomId: string, senderId: string, data: { content?: string; attachments?: { url: string; type: string; filename?: string; size?: number }[]; type?: any }) {
