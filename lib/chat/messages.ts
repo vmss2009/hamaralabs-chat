@@ -1,8 +1,9 @@
 import { prisma } from "../db/prisma";
 import { chatBus } from './realtime';
 
-export async function listMessages(roomId: string, cursor?: string) {
-  const take = 30;
+export async function listMessages(roomId: string, cursor?: string, takeParam?: number) {
+  // Default page size is 30 if not specified; bound between 1 and 50
+  const take = Math.min(50, Math.max(1, Number.isFinite(takeParam as number) ? (takeParam as number) : 30));
   const messages = await prisma.message.findMany({
     where: { chatRoomId: roomId },
     orderBy: { createdAt: 'desc' },
@@ -11,6 +12,7 @@ export async function listMessages(roomId: string, cursor?: string) {
     cursor: cursor ? { id: cursor } : undefined,
     include: { attachments: true, sender: true }
   });
+  // We return messages in chronological order; nextCursor points to the oldest item in this page
   return { messages: messages.reverse(), nextCursor: messages.length === take ? messages[messages.length - 1].id : null };
 }
 

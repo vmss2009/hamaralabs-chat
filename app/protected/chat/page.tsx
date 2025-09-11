@@ -245,10 +245,25 @@ function MenuBar({ editor }: { editor: Editor }) {
       {/* Math popover for entering LaTeX with live preview */}
       <Popover.Root open={mathOpen} onOpenChange={setMathOpen}>
         <Popover.Trigger asChild>
-          <button type="button" className="p-2 rounded border" title="Math" aria-label="Math"><IconMath className="h-4 w-4" /></button>
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); setMathOpen(o => !o); }}
+            className="p-2 rounded border"
+            title="Math"
+            aria-label="Math"
+          >
+            <IconMath className="h-4 w-4" />
+          </button>
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content side="top" align="start" sideOffset={6} onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()} className="z-50 rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2">
+          <Popover.Content
+            side="top"
+            align="start"
+            sideOffset={6}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 space-y-2"
+          >
           <div className="text-[11px] uppercase tracking-wider text-slate-400">Insert LaTeX</div>
           <input
             autoFocus
@@ -343,6 +358,8 @@ export default function ChatPage() {
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [olderLoading, setOlderLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [editorEmpty, setEditorEmpty] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -353,6 +370,9 @@ export default function ChatPage() {
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
+  const [olderIOEnabled, setOlderIOEnabled] = useState(false);
   // Attachments state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -370,6 +390,10 @@ export default function ChatPage() {
   const esRef = useRef<EventSource | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
   const meId = useMemo(() => session?.user?.id ?? null, [session?.user?.id]);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const olderObserverRef = useRef<IntersectionObserver | null>(null);
+  const olderInFlightRef = useRef(false);
+  const leftTopSinceLastLoadRef = useRef(false);
   // Audio + emoji removed
   const [recordError, setRecordError] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -428,6 +452,60 @@ export default function ChatPage() {
 
   // (Original inline MenuBar removed; using provided MenuBar above)
 
+  const loadOlder = useCallback(async () => {
+    if (!activeRoom || !nextCursor || olderInFlightRef.current) return;
+    olderInFlightRef.current = true;
+    setOlderLoading(true);
+    const el = listRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    const prevTop = el?.scrollTop ?? 0;
+    try {
+      const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&cursor=${encodeURIComponent(nextCursor)}&take=20`);
+      const d = await r.json();
+      if (Array.isArray(d.messages)) {
+        setMessages(curr => {
+          const byId = new Map<string, any>(curr.map(m => [m.id, m]));
+          for (const m of d.messages) byId.set(m.id, m);
+          const arr = Array.from(byId.values());
+          arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          return arr;
+        });
+        setNextCursor(d.nextCursor || null);
+        if (el) {
+          setTimeout(() => {
+            const newHeight = el.scrollHeight;
+            el.scrollTop = newHeight - prevHeight + prevTop;
+          }, 0);
+        }
+      }
+    } catch { /* ignore */ }
+    finally {
+      setOlderLoading(false);
+      olderInFlightRef.current = false;
+    }
+  }, [activeRoom, nextCursor]);
+
+  useEffect(() => {
+    if (!olderIOEnabled) return;
+    const root = listRef.current;
+    const target = topSentinelRef.current;
+    if (!root || !target) return;
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry && entry.isIntersecting) {
+        // Pause observing until the user scrolls away and back to the top
+        io.disconnect();
+        olderObserverRef.current = null;
+        setOlderIOEnabled(false);
+        leftTopSinceLastLoadRef.current = false;
+        loadOlder();
+      }
+    }, { root, rootMargin: '0px', threshold: 0.1 });
+    olderObserverRef.current = io;
+    io.observe(target);
+    return () => { io.disconnect(); olderObserverRef.current = null; };
+  }, [olderIOEnabled, loadOlder]);
+
   // Fetch rooms
   useEffect(() => {
     const load = async () => {
@@ -450,15 +528,15 @@ export default function ChatPage() {
   // Also fetch users when manage members modal opens
   useEffect(() => { if(manageOpen) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [manageOpen]);
 
-  // Load messages + SSE subscription
+  // Load paginated messages (latest 10 first) + SSE subscription
   useEffect(() => {
-    if(!activeRoom) { setMessages([]); setRoomMembers([]); return; }
+    if(!activeRoom) { setMessages([]); setRoomMembers([]); setNextCursor(null); return; }
     setMessagesLoading(true); setError(null);
     let cancelled = false;
     const load = async () => {
       try {
         const [r1, r2] = await Promise.all([
-          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}`),
+          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=10`),
           fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`),
         ]);
         const d1 = await r1.json();
@@ -467,7 +545,9 @@ export default function ChatPage() {
         if(!r2.ok) throw new Error(d2.error || 'Failed to load room');
         if (!cancelled) {
           setMessages(Array.isArray(d1.messages) ? d1.messages : []);
+          setNextCursor(d1.nextCursor || null);
           setRoomMembers(Array.isArray(d2.room?.members) ? d2.room.members : []);
+          setShouldAutoScroll(true);
         }
       } catch (e: any) { if(!cancelled) setError(e.message); }
       finally { if(!cancelled) setMessagesLoading(false); }
@@ -479,17 +559,64 @@ export default function ChatPage() {
     const es = new EventSource(`/api/chat/events?roomId=${encodeURIComponent(activeRoom)}`);
     esRef.current = es;
     es.addEventListener('message', async () => {
-      // Incremental improvement: ideally fetch only the new message.
-      const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}`);
-      const d = await r.json();
-      if (Array.isArray(d.messages)) setMessages(d.messages);
+      try {
+        const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=10`);
+        const d = await r.json();
+        if (Array.isArray(d.messages)) {
+          setMessages(curr => {
+            const byId = new Map<string, any>(curr.map(m => [m.id, m]));
+            for (const m of d.messages) byId.set(m.id, m);
+            const arr = Array.from(byId.values());
+            arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            return arr;
+          });
+          // If user is near bottom, auto-scroll
+          const el = listRef.current;
+          if (el) {
+            const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            if (nearBottom) setShouldAutoScroll(true);
+          }
+        }
+      } catch { /* ignore */ }
     });
     es.onerror = () => { /* silent reconnect by browser */ };
 
     return () => { cancelled = true; es.close(); };
   }, [activeRoom]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => {
+    if (shouldAutoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setShouldAutoScroll(false);
+      setOlderIOEnabled(true);
+    }
+  }, [messages, shouldAutoScroll]);
+
+  // Pause/resume "load older" observer: after one load we pause it; re-enable only after user scrolls away from top and returns
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const THRESH = 80; // px from top considered "at top"
+    const onScroll = () => {
+      if (root.scrollTop > THRESH) {
+        // User moved away from the top; mark ready for next re-enable
+        leftTopSinceLastLoadRef.current = true;
+        // Make sure the observer is paused while away from top
+        if (olderObserverRef.current) {
+          olderObserverRef.current.disconnect();
+          olderObserverRef.current = null;
+        }
+        if (olderIOEnabled) setOlderIOEnabled(false);
+      } else if (root.scrollTop <= THRESH && leftTopSinceLastLoadRef.current) {
+        // User came back to the top; re-enable observing if there are more pages
+        if (!olderObserverRef.current && nextCursor) {
+          setOlderIOEnabled(true);
+        }
+      }
+    };
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => root.removeEventListener('scroll', onScroll);
+  }, [nextCursor, olderIOEnabled]);
 
   const toggleMember = (id: string) => { setSelectedMembers(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
 
@@ -650,6 +777,7 @@ export default function ChatPage() {
       // Clear composer before sending
       if (html) editor.commands.clearContent();
       setSelectedFiles([]);
+      setShouldAutoScroll(true);
 
       const r = await fetch('/api/chat/messages', {
         method: 'POST',
@@ -824,7 +952,15 @@ function SelectedAttachmentPreview({ file, onRemove }: { file: File; onRemove: (
                 </button>
               </div>
             </header>
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-3 md:space-y-4 custom-scroll" onClick={()=> setOpenMenuId(null)}>
+            <div ref={listRef} className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-3 md:space-y-4 custom-scroll" onClick={()=> setOpenMenuId(null)}>
+              {olderLoading && (
+                <div className="absolute top-2 left-0 right-0 z-20 flex items-center justify-center pointer-events-none">
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-slate-800/90 border border-slate-700/70 text-[11px]">
+                    <IconSpinner className="h-3.5 w-3.5" /> Loading older…
+                  </div>
+                </div>
+              )}
+              <div ref={topSentinelRef} className="h-1" />
               {messages.map(m => {
                 const mine = m.sender?.id ? (m.sender.id === meId) : (m.sender?.email && m.sender.email === session?.user?.email);
                 const showActions = mine && withinWindow(m.createdAt);
