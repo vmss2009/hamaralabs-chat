@@ -1145,7 +1145,12 @@ function SelectedAttachmentPreview({ file, onRemove }: { file: File; onRemove: (
                               </button>
                               <button
                                 className="w-full text-left text-xs px-3 py-2 hover:bg-slate-800 text-rose-300"
-                                onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); removeMessage(m.id); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(null);
+                                  const ok = typeof window !== 'undefined' ? window.confirm('Delete this message? This cannot be undone.') : true;
+                                  if (ok) removeMessage(m.id);
+                                }}
                               >
                                 Delete
                               </button>
