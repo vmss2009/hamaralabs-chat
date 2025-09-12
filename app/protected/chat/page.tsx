@@ -62,7 +62,7 @@ export default function ChatIndex() {
       <header className="sticky top-0 z-10 border-b border-slate-800/70 bg-slate-900/60 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-sm font-semibold tracking-wide uppercase text-slate-200">Chats</h1>
-          <button onClick={() => setShowModal(true)} className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium shadow">Create Room</button>
+          <button onClick={() => setShowModal(true)} className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium shadow">Create chat</button>
         </div>
       </header>
       <main className="mx-auto max-w-4xl px-4 py-6">
@@ -83,7 +83,6 @@ export default function ChatIndex() {
                   >
                     <div className="min-w-0">
                       <div className="font-medium text-slate-200 truncate">{r.name}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Open chat</div>
                     </div>
                     <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-300"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
