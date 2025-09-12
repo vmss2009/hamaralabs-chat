@@ -744,18 +744,9 @@ export default function ChatRoomPage() {
                             isRecording={isRecording}
                             attachmentsCount={selectedFiles.length}
                             maxFiles={MAX_FILES}
+                            showJumpToLatest={showJumpToLatest}
+                            onJumpToLatest={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowJumpToLatest(false); }}
                           />
-                        )}
-                        {showJumpToLatest && (
-                          <button
-                            type="button"
-                            onClick={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowJumpToLatest(false); }}
-                            className="absolute top-0 right-0 translate-x-2 -translate-y-2 h-8 w-8 rounded-full bg-indigo-600 hover:bg-indigo-500 border border-indigo-300/50 shadow-lg shadow-indigo-900/40 grid place-items-center z-50 pointer-events-auto"
-                            title="Jump to latest"
-                            aria-label="Jump to latest"
-                          >
-                            <svg viewBox="0 0 24 24" className="h-4 w-4 pointer-events-none" fill="none" stroke="white" strokeWidth="1.8"><path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>
                         )}
                       </div>
                       <div
