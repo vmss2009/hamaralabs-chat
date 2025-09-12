@@ -109,7 +109,7 @@ export function ChatSidebar({ rooms, roomsLoading, activeRoom, onSelectRoom, onC
         <ul className="py-2 space-y-1">
           {rooms.map(r => (
             <li key={r.id}>
-              <button onClick={() => { onSelectRoom(r.id); setOpenSafe(false); }} className={clsx('group w-full text-left px-4 py-3 flex flex-col gap-1 border-l-2 transition-all duration-200', activeRoom === r.id ? 'bg-slate-800/70 border-indigo-400 shadow-inner shadow-indigo-900/30' : 'border-transparent hover:bg-slate-800/40')}>
+              <button onClick={() => { onSelectRoom(r.id) }} className={clsx('group w-full text-left px-4 py-3 flex flex-col gap-1 border-l-2 transition-all duration-200', activeRoom === r.id ? 'bg-slate-800/70 border-indigo-400 shadow-inner shadow-indigo-900/30' : 'border-transparent hover:bg-slate-800/40')}>
                 <span className="font-medium text-sm truncate group-hover:text-indigo-300/90">{r.name}</span>
               </button>
             </li>

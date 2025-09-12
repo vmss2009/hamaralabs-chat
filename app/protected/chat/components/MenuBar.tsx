@@ -4,7 +4,7 @@ import type { Editor } from '@tiptap/core';
 import * as Popover from '@radix-ui/react-popover';
 import katex from 'katex';
 import clsx from 'clsx';
-import { IconBold, IconBraces, IconCode, IconHR, IconItalic, IconListBullet, IconListOrdered, IconMath, IconPilcrow, IconQuote, IconRedo, IconReturn, IconStrikethrough, IconUndo, IconAlignLeft, IconAlignCenter, IconAlignRight, IconAlignJustify, IconPalette, IconTable } from './Icons';
+import { IconBold, IconBraces, IconCode, IconHR, IconItalic, IconListBullet, IconListOrdered, IconMath, IconPilcrow, IconQuote, IconRedo, IconReturn, IconStrikethrough, IconUndo, IconAlignLeft, IconAlignCenter, IconAlignRight, IconAlignJustify, IconPalette, IconTable, IconPaperclip, IconMic, IconStop } from './Icons';
 
 function useEditorState<T>({ editor, selector }: { editor: Editor; selector: (ctx: { editor: Editor }) => T }): T {
   const compute = useCallback(() => selector({ editor }), [editor, selector]);
@@ -24,7 +24,17 @@ function useEditorState<T>({ editor, selector }: { editor: Editor; selector: (ct
 return state;
 }
 
-export function MenuBar({ editor }: { editor: Editor }) {
+type MenuBarProps = {
+  editor: Editor;
+  onAttach?: () => void;
+  isUploading?: boolean;
+  onToggleRecording?: () => void;
+  isRecording?: boolean;
+  attachmentsCount?: number;
+  maxFiles?: number;
+};
+
+export function MenuBar({ editor, onAttach, isUploading, onToggleRecording, isRecording, attachmentsCount, maxFiles }: MenuBarProps) {
   const [latex, setLatex] = useState<string>('x^2');
 
   // Apply heading to the current block (or selection of blocks)
@@ -161,7 +171,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
 
   return (
     <div className="control-group">
-      <div className="button-group flex flex-wrap gap-1 mb-2 text-xs relative z-10">
+      <div className="button-group flex flex-wrap items-center gap-1 mb-2 text-xs relative z-10">
       {/* Format group */}
       <Popover.Root>
         <Popover.Trigger asChild>
@@ -177,7 +187,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
             </div>
           </Popover.Content>
         </Popover.Portal>
-      </Popover.Root>
+  </Popover.Root>
       {/* Block group */}
       <Popover.Root>
         <Popover.Trigger asChild>
@@ -201,7 +211,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
             </div>
           </Popover.Content>
         </Popover.Portal>
-      </Popover.Root>
+  </Popover.Root>
       {/* Lists group */}
       <Popover.Root>
         <Popover.Trigger asChild>
@@ -213,7 +223,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
             <button title="Ordered list" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={clsx('p-2 rounded border', editorState.isOrderedList && 'bg-indigo-600 text-white')}><IconListOrdered className="h-4 w-4"/></button>
           </Popover.Content>
         </Popover.Portal>
-      </Popover.Root>
+  </Popover.Root>
       {/* Align group */}
       <Popover.Root>
         <Popover.Trigger asChild>
@@ -227,7 +237,7 @@ export function MenuBar({ editor }: { editor: Editor }) {
             <button title="Justify" onClick={() => editor.chain().focus().setTextAlign('justify').run()} className={clsx('p-2 rounded border', editorState.isAlignJustify && 'bg-indigo-600 text-white')}><IconAlignJustify className="h-4 w-4"/></button>
           </Popover.Content>
         </Popover.Portal>
-      </Popover.Root>
+  </Popover.Root>
       {/* Style group (text color + highlight) */}
       <Popover.Root open={styleOpen} onOpenChange={setStyleOpen}>
         <Popover.Trigger asChild>
@@ -388,6 +398,33 @@ export function MenuBar({ editor }: { editor: Editor }) {
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
+      {/* Separator and extra controls */}
+      <span className="mx-1 select-none text-slate-600">|</span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          title="Attach files"
+          aria-label="Attach files"
+          onClick={onAttach}
+          className="p-2 rounded border disabled:opacity-50"
+          disabled={!!isUploading}
+        >
+          <IconPaperclip className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          title={isRecording ? 'Stop recording' : 'Record audio'}
+          aria-label={isRecording ? 'Stop recording' : 'Record audio'}
+          onClick={onToggleRecording}
+          className="p-2 rounded border disabled:opacity-50"
+          disabled={!!isUploading}
+        >
+          {isRecording ? <IconStop className="h-4 w-4" /> : <IconMic className="h-4 w-4" />}
+        </button>
+        {typeof attachmentsCount === 'number' && typeof maxFiles === 'number' && (
+          <span className="ml-1 text-[11px] text-slate-400">{attachmentsCount}/{maxFiles}</span>
+        )}
+      </div>
     </div>
   </div>
   )

@@ -29,6 +29,7 @@ export async function POST(req: Request) {
   const key = `${safeRoomId}/${userId}/${storedName}`;
 
   const contentType = (file.type || 'application/octet-stream').split(';')[0];
+  console.log(contentType, file.type);
   await s3.send(new PutObjectCommand({
     Bucket: 'chat',
     Key: key,
