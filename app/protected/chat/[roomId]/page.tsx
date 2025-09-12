@@ -44,6 +44,8 @@ export default function ChatRoomPage() {
   const [showModal, setShowModal] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [roomMembers, setRoomMembers] = useState<User[]>([]);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [activeRoomName, setActiveRoomName] = useState<string>('');
   const [manageOpen, setManageOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
   const [roomName, setRoomName] = useState('');
@@ -218,61 +220,80 @@ export default function ChatRoomPage() {
   // Also fetch users when manage members modal opens
   useEffect(() => { if(manageOpen) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [manageOpen]);
 
-  // Load paginated messages (latest 10 first) + SSE subscription
+  // Load room and check access; if allowed, load messages and subscribe to SSE
   useEffect(() => {
-    if(!activeRoom) { setMessages([]); setRoomMembers([]); setNextCursor(null); return; }
-    setMessagesLoading(true); setError(null);
+    if (!activeRoom) { setMessages([]); setRoomMembers([]); setNextCursor(null); setHasAccess(null); return; }
+    if (!meId) { setHasAccess(null); return; }
+    setMessagesLoading(true); setError(null); setHasAccess(null);
     let cancelled = false;
+    let es: EventSource | null = null;
     const load = async () => {
       try {
-        const [r1, r2] = await Promise.all([
-          fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`),
-          fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`),
-        ]);
-        const d1 = await r1.json();
-        const d2 = await r2.json();
-        if(!r1.ok) throw new Error(d1.error || 'Failed to load messages');
-        if(!r2.ok) throw new Error(d2.error || 'Failed to load room');
-        if (!cancelled) {
-          setMessages(Array.isArray(d1.messages) ? d1.messages : []);
-          setNextCursor(d1.nextCursor || null);
-          setRoomMembers(Array.isArray(d2.room?.members) ? d2.room.members : []);
-          // Do not auto-scroll on initial load to avoid jumpiness; user can scroll manually.
+        // 1) Fetch room details to verify access
+        const r2 = await fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`);
+        const d2 = await r2.json().catch(() => ({}));
+        if (!r2.ok || !d2?.room) {
+          if (!cancelled) { setHasAccess(false); setRoomMembers([]); setActiveRoomName(''); setMessages([]); setNextCursor(null); }
+          return;
         }
-      } catch (e: any) { if(!cancelled) setError(e.message); }
-      finally { if(!cancelled) setMessagesLoading(false); }
-    };
-    load();
+        const members: any[] = Array.isArray(d2.room?.members) ? d2.room.members : [];
+        const allowed = members.some(m => m?.id === meId);
+        if (!allowed) {
+          if (!cancelled) { setHasAccess(false); setRoomMembers([]); setActiveRoomName(''); setMessages([]); setNextCursor(null); }
+          return;
+        }
+        if (cancelled) return;
+        setHasAccess(true);
+        setRoomMembers(members as any);
+        setActiveRoomName(d2.room?.name || '');
 
-    // Tear down previous SSE
-    if (esRef.current) { esRef.current.close(); }
-    const es = new EventSource(`/api/chat/events?roomId=${encodeURIComponent(activeRoom)}`);
-    esRef.current = es;
-    es.addEventListener('message', async () => {
-      try {
-        const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`);
-        const d = await r.json();
-        if (Array.isArray(d.messages)) {
-          setMessages(curr => {
-            const byId = new Map<string, any>(curr.map(m => [m.id, m]));
-            for (const m of d.messages) byId.set(m.id, m);
-            const arr = Array.from(byId.values());
-            arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-            return arr;
-          });
-          // If user is near bottom, auto-scroll
-          const el = listRef.current;
-          if (el) {
-            const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-            if (nearBottom) setShouldAutoScroll(true);
+        // 2) Load latest messages now that access is confirmed
+        const r1 = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`);
+        const d1 = await r1.json().catch(() => ({}));
+        if (!cancelled) {
+          if (r1.ok && Array.isArray(d1.messages)) {
+            setMessages(d1.messages);
+            setNextCursor(d1.nextCursor || null);
+          } else {
+            setMessages([]); setNextCursor(null);
           }
         }
-      } catch { /* ignore */ }
-    });
-    es.onerror = () => { /* silent reconnect by browser */ };
 
-    return () => { cancelled = true; es.close(); };
-  }, [activeRoom]);
+        if (cancelled) return;
+        // 3) Subscribe to SSE only when allowed
+        if (esRef.current) { esRef.current.close(); }
+        es = new EventSource(`/api/chat/events?roomId=${encodeURIComponent(activeRoom)}`);
+        esRef.current = es;
+        es.addEventListener('message', async () => {
+          try {
+            const r = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`);
+            const d = await r.json();
+            if (Array.isArray(d.messages)) {
+              setMessages(curr => {
+                const byId = new Map<string, any>(curr.map(m => [m.id, m]));
+                for (const m of d.messages) byId.set(m.id, m);
+                const arr = Array.from(byId.values());
+                arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                return arr;
+              });
+              const el = listRef.current;
+              if (el) {
+                const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                if (nearBottom) setShouldAutoScroll(true);
+              }
+            }
+          } catch { /* ignore */ }
+        });
+        es.onerror = () => { /* silent reconnect by browser */ };
+      } catch (e: any) {
+        if (!cancelled) { setError(e.message || 'Failed to load room'); setHasAccess(false); }
+      } finally {
+        if (!cancelled) setMessagesLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; if (es) es.close(); };
+  }, [activeRoom, meId]);
 
   // Reset the initial scroll flag whenever the room changes
   useEffect(() => {
@@ -613,17 +634,22 @@ export default function ChatRoomPage() {
       <DragOverlay show={isDraggingFiles} remaining={MAX_FILES - selectedFiles.length} />
       {/* Main Chat Area */}
       <section className="flex-1 flex flex-col h-full min-w-0">
-        {!activeRoomObj && (
+        {hasAccess === null && (
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-400 text-sm">
               <IconSpinner className="h-4 w-4 animate-spin" /> Loading chat…
             </div>
           </div>
         )}
-        {activeRoomObj && (
+        {hasAccess === false && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-slate-400 text-sm">Chat does not exist</div>
+          </div>
+        )}
+        {hasAccess === true && (
           <>
             <ChatHeader
-              roomName={activeRoomObj.name}
+              roomName={activeRoomName || String(activeRoom || '')}
               membersCount={roomMembers.length}
               loading={messagesLoading}
               onManage={() => setManageOpen(true)}
