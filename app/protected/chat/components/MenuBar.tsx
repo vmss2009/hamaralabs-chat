@@ -320,9 +320,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 space-x-2 flex"
               >
@@ -389,9 +389,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 space-y-2"
               >
@@ -482,9 +482,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 flex gap-1"
               >
@@ -529,9 +529,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-2 shadow-xl shadow-black/50 flex gap-1"
               >
@@ -586,16 +586,12 @@ export function MenuBar({
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>
-          {/* Style group (text color + highlight) */}
+          {/* Style group */}
           <Popover.Root open={styleOpen} onOpenChange={setStyleOpen}>
             <Popover.Trigger asChild>
               <button
                 title="Style"
                 aria-label="Style"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setStyleOpen((o) => !o);
-                }}
                 className="p-2 rounded border"
               >
                 <IconPalette className="h-4 w-4" />
@@ -604,10 +600,11 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
+                onCloseAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[26rem] sm:w-[30rem] max-w-[95vw] space-y-3"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
@@ -763,9 +760,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="start"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[18rem] space-y-2"
               >
@@ -916,9 +913,9 @@ export function MenuBar({
             <Popover.Portal>
               <Popover.Content
                 side="top"
-                align="center"
+                align="end"
                 sideOffset={6}
-                collisionPadding={8}
+                collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 onCloseAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 max-w-[90vw] max-h-[70vh] overflow-auto space-y-2"
