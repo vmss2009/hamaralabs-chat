@@ -2,10 +2,18 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 
 export function AttachmentPreview({ a, onImageClick }: { a: any; onImageClick?: (src: string) => void }) {
-  if(a.type?.startsWith('image/')) return (
-    <div className="relative group">
-      <img src={a.url} alt={a.filename} onClick={() => onImageClick?.(a.url)} className="h-24 w-24 rounded-lg object-cover border border-slate-700/70 shadow-md shadow-black/40 cursor-zoom-in" />
-      <span className="absolute bottom-1 right-2 text-[10px] px-2 py-0.5 rounded bg-black/50 backdrop-blur text-slate-200 opacity-0 group-hover:opacity-100 transition">{a.filename}</span>
+  // Allow image viewer only when size is <= 20MB, or size unknown
+  const canOpenViewer = typeof a.size === 'number' ? a.size <= 20 * 1024 * 1024 : true;
+  if (a.type?.startsWith('image/')) return (
+    <div className="relative group w-24 h-24 rounded-lg border border-slate-700/70 shadow-md shadow-black/40 bg-slate-900/40 overflow-hidden grid place-items-center">
+      <img
+        src={a.url}
+        alt={a.filename}
+        onClick={() => { if (canOpenViewer) onImageClick?.(a.url); }}
+        className="max-w-full max-h-full object-contain cursor-zoom-in select-none"
+        draggable={false}
+      />
+      <span className="absolute bottom-1 right-1 left-1 text-[10px] px-1 py-0.5 rounded bg-black/50 backdrop-blur text-slate-200 opacity-0 group-hover:opacity-100 transition truncate" title={a.filename}>{a.filename}</span>
     </div>
   );
   if(a.type?.startsWith('audio/')) return (

@@ -901,7 +901,18 @@ export default function ChatRoomPage() {
           </div>
           <div className="flex-1 overflow-auto">
             <div className="min-h-full w-full flex items-center justify-center">
-              <img src={viewerSrc} alt="preview" style={{ transform: `scale(${viewerZoom})` }} className="max-w-none select-none" />
+              <img
+                src={viewerSrc}
+                alt="preview"
+                className="select-none"
+                style={{
+                  transform: `scale(${viewerZoom})`,
+                  transformOrigin: 'center center',
+                  maxWidth: 'min(90vw, 1600px)',
+                  maxHeight: 'min(85vh, 1200px)'
+                }}
+                draggable={false}
+              />
             </div>
           </div>
         </div>
