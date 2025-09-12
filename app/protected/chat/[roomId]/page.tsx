@@ -20,7 +20,7 @@ import { CreateRoomModal } from '@/components/chat/CreateRoomModal';
 import { ManageMembersModal } from '@/components/chat/ManageMembersModal';
 // Keep existing chat UI atoms from the local folder (note the path difference)
 import { MenuBar } from '../components/MenuBar';
-import { IconSpinner, IconX, IconResizeNS, IconPlus, IconMinus, IconSend, IconCheck } from '../components/Icons';
+import { IconSpinner, IconX, IconResizeNS, IconPlus, IconMinus } from '../components/Icons';
 import { MessageBody } from '../components/MessageBody';
 import { AttachmentPreview, SelectedAttachmentPreview } from '../components/AttachmentPreview';
 
@@ -746,6 +746,13 @@ export default function ChatRoomPage() {
                             maxFiles={MAX_FILES}
                             showJumpToLatest={showJumpToLatest}
                             onJumpToLatest={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowJumpToLatest(false); }}
+                            onSend={send}
+                            canSend={canSend}
+                            showSend={true}
+                            isEditing={!!editingId}
+                            canSaveEdit={!editorEmpty}
+                            onSaveEdit={saveEdit}
+                            onCancelEdit={cancelEdit}
                           />
                         )}
                       </div>
@@ -805,22 +812,7 @@ export default function ChatRoomPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {editingId ? (
-                    <>
-                      <button aria-label="Save edit" onClick={saveEdit} className="h-10 px-4 grid place-items-center rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium shadow-lg shadow-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={editorEmpty}>
-                        <IconCheck className="h-5 w-5 text-white" />
-                      </button>
-                      <button aria-label="Cancel edit" onClick={cancelEdit} className="h-10 px-4 grid place-items-center rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
-                        <IconX className="h-5 w-5 text-white" />
-                      </button>
-                    </>
-                  ) : (
-                    <button aria-label="Send" onClick={send} className="h-10 px-4 grid place-items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium shadow-lg shadow-indigo-950/40 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!canSend}>
-                      <IconSend className="h-5 w-5 text-white" />
-                    </button>
-                  )}
-                </div>
+                {/* Save/Cancel moved into MenuBar while editing */}
               </div>
             </footer>
           </>

@@ -28,6 +28,9 @@ import {
   IconPaperclip,
   IconMic,
   IconStop,
+  IconSend,
+  IconCheck,
+  IconX,
 } from "./Icons";
 
 function useEditorState<T>({
@@ -64,6 +67,14 @@ type MenuBarProps = {
   maxFiles?: number;
   showJumpToLatest?: boolean;
   onJumpToLatest?: () => void;
+  onSend?: () => void;
+  canSend?: boolean;
+  showSend?: boolean;
+  // Edit controls
+  isEditing?: boolean;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
+  canSaveEdit?: boolean;
 };
 
 export function MenuBar({
@@ -76,6 +87,13 @@ export function MenuBar({
   maxFiles,
   showJumpToLatest,
   onJumpToLatest,
+  onSend,
+  canSend,
+  showSend,
+  isEditing,
+  onSaveEdit,
+  onCancelEdit,
+  canSaveEdit,
 }: MenuBarProps) {
   const [latex, setLatex] = useState<string>("x^2");
 
@@ -631,7 +649,7 @@ export function MenuBar({
                         Clear
                       </button>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 ml-auto">
                       <input
                         type="color"
                         value={tcColor || "#000000"}
@@ -1017,6 +1035,41 @@ export function MenuBar({
                 </span>
               )}
           </div>
+          <span className="mx-1 select-none text-slate-600">|</span>
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Save edit"
+                  aria-label="Save edit"
+                  onClick={onSaveEdit}
+                  className="p-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-300/50 shadow-md shadow-emerald-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={!canSaveEdit}
+                >
+                  <IconCheck className="h-4 w-4 text-white" />
+                </button>
+                <button
+                  type="button"
+                  title="Cancel edit"
+                  aria-label="Cancel edit"
+                  onClick={onCancelEdit}
+                  className="p-2 rounded bg-slate-700 hover:bg-slate-600 text-white border border-slate-400/40 shadow-md shadow-slate-900/20"
+                >
+                  <IconX className="h-4 w-4 text-white" />
+                </button>
+              </div>
+            ) : showSend ? (
+              <button
+                type="button"
+                title="Send"
+                aria-label="Send"
+                onClick={onSend}
+                className="p-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-400/50 shadow-md shadow-indigo-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!canSend}
+              >
+                <IconSend className="h-4 w-4 text-white" />
+              </button>
+            ) : null}
         </div>
         {/* Right-aligned controls */}
         <div className="flex items-center gap-1 ml-auto">
