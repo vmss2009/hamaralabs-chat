@@ -761,24 +761,29 @@ export default function ChatRoomPage() {
                           type="button"
                           title="Resize editor"
                           aria-label="Resize editor"
-                          onMouseDown={(e) => {
+                          onPointerDown={(e) => {
                             e.preventDefault();
                             const startY = e.clientY;
                             const startH = composerHeight;
-                            const onMove = (ev: MouseEvent) => {
+                            const pid = e.pointerId;
+                            try { (e.currentTarget as any).setPointerCapture?.(pid); } catch {}
+                            const onMove = (ev: PointerEvent) => {
                               const delta = ev.clientY - startY;
                               // Top-right handle semantics: drag down reduces height, drag up increases height
                               const nh = Math.max(56, Math.min(startH - delta, Math.floor(window.innerHeight * 0.6)));
                               setComposerHeight(nh);
                             };
                             const onUp = () => {
-                              document.removeEventListener('mousemove', onMove);
-                              document.removeEventListener('mouseup', onUp);
+                              document.removeEventListener('pointermove', onMove);
+                              document.removeEventListener('pointerup', onUp);
+                              document.removeEventListener('pointercancel', onUp);
+                              try { (e.currentTarget as any).releasePointerCapture?.(pid); } catch {}
                             };
-                            document.addEventListener('mousemove', onMove);
-                            document.addEventListener('mouseup', onUp);
+                            document.addEventListener('pointermove', onMove, { passive: true } as any);
+                            document.addEventListener('pointerup', onUp);
+                            document.addEventListener('pointercancel', onUp);
                           }}
-                          className="absolute top-1 right-1 w-5 h-5 grid place-items-center rounded-md border border-slate-600/70 bg-slate-700/50 hover:bg-slate-600/70 cursor-ns-resize"
+                          className="absolute top-1 right-1 w-5 h-5 grid place-items-center rounded-md border border-slate-600/70 bg-slate-700/50 hover:bg-slate-600/70 cursor-ns-resize touch-none select-none"
                         >
                           <IconResizeNS className="h-3.5 w-3.5 text-slate-300" />
                         </button>
