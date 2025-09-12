@@ -2,7 +2,7 @@ import React from 'react';
 
 export function ChatHeader({ roomName, membersCount, loading, onManage }: { roomName: string; membersCount: number; loading: boolean; onManage: () => void; }) {
   return (
-    <header className="h-14 flex items-center justify-between px-5 border-b border-slate-800/70 bg-slate-900/60 backdrop-blur-xl">
+    <header className="h-14 flex items-center justify-between pr-5 pl-14 sm:pl-16 border-b border-slate-800/70 bg-slate-900/60 backdrop-blur-xl">
       <div className="flex flex-col">
         <h1 className="font-semibold text-sm leading-tight">{roomName}</h1>
       </div>
