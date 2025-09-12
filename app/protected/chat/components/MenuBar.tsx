@@ -1035,67 +1035,69 @@ export function MenuBar({
                 </span>
               )}
           </div>
-          <span className="mx-1 select-none text-slate-600">|</span>
-            {isEditing ? (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  title="Save edit"
-                  aria-label="Save edit"
-                  onClick={onSaveEdit}
-                  className="p-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-300/50 shadow-md shadow-emerald-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                  disabled={!canSaveEdit}
-                >
-                  <IconCheck className="h-4 w-4 text-white" />
-                </button>
-                <button
-                  type="button"
-                  title="Cancel edit"
-                  aria-label="Cancel edit"
-                  onClick={onCancelEdit}
-                  className="p-2 rounded bg-slate-700 hover:bg-slate-600 text-white border border-slate-400/40 shadow-md shadow-slate-900/20"
-                >
-                  <IconX className="h-4 w-4 text-white" />
-                </button>
-              </div>
-            ) : showSend ? (
+          {showJumpToLatest && (
+            <>
+              <span className="mx-1 select-none text-slate-600">|</span>
               <button
                 type="button"
-                title="Send"
-                aria-label="Send"
-                onClick={onSend}
-                className="p-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-400/50 shadow-md shadow-indigo-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={!canSend}
+                onClick={onJumpToLatest}
+                className="ml-1 h-7 w-7 rounded-full bg-indigo-600 hover:bg-indigo-500 border border-indigo-300/50 shadow-md shadow-indigo-900/30 grid place-items-center"
+                title="Jump to latest"
+                aria-label="Jump to latest"
               >
-                <IconSend className="h-4 w-4 text-white" />
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="1.8"
+                >
+                  <path
+                    d="M6 9l6 6 6-6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
-            ) : null}
+            </>
+          )}
         </div>
-  {/* Right-aligned controls */}
-  <div className="flex items-center gap-1 ml-2 shrink-0">
-          {showJumpToLatest && (
+        {/* Right-aligned, fixed controls: Send or Edit actions */}
+        <div className="flex items-center gap-1 ml-2 shrink-0">
+          {isEditing ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                title="Save edit"
+                aria-label="Save edit"
+                onClick={onSaveEdit}
+                className="p-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-300/50 shadow-md shadow-emerald-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!canSaveEdit}
+              >
+                <IconCheck className="h-4 w-4 text-white" />
+              </button>
+              <button
+                type="button"
+                title="Cancel edit"
+                aria-label="Cancel edit"
+                onClick={onCancelEdit}
+                className="p-2 rounded bg-slate-700 hover:bg-slate-600 text-white border border-slate-400/40 shadow-md shadow-slate-900/20"
+              >
+                <IconX className="h-4 w-4 text-white" />
+              </button>
+            </div>
+          ) : showSend ? (
             <button
               type="button"
-              onClick={onJumpToLatest}
-              className="ml-2 h-7 w-7 rounded-full bg-indigo-600 hover:bg-indigo-500 border border-indigo-300/50 shadow-md shadow-indigo-900/30 grid place-items-center"
-              title="Jump to latest"
-              aria-label="Jump to latest"
+              title="Send"
+              aria-label="Send"
+              onClick={onSend}
+              className="p-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-400/50 shadow-md shadow-indigo-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={!canSend}
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="white"
-                strokeWidth="1.8"
-              >
-                <path
-                  d="M6 9l6 6 6-6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <IconSend className="h-4 w-4 text-white" />
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
