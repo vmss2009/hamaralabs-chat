@@ -678,6 +678,10 @@ export default function ChatRoomPage() {
                       )}
                       title={new Date(m.createdAt).toLocaleString()}
                     >
+                      {/* Sender email label (WhatsApp-style) */}
+                      <div className={clsx('text-[11px] font-semibold leading-none', mine ? 'text-indigo-100/90' : 'text-emerald-300')}>
+                        {m.sender?.email || 'Unknown'}
+                      </div>
                       {showActions && (
                         <div className={clsx('absolute top-1', mine ? 'right-2' : 'left-2')}>
                           <button
