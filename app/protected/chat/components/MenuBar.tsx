@@ -303,9 +303,9 @@ export function MenuBar({
 
   return (
     <div className="control-group">
-      <div className="button-group flex items-center justify-between flex-wrap mb-2 text-xs relative z-10">
-        {/* Left tool groups */}
-        <div className="flex flex-wrap items-center gap-1">
+      <div className="button-group flex items-center mb-2 text-xs relative z-10">
+        {/* Left tool groups: single row with horizontal scroll on overflow */}
+        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
           {/* Format group */}
           <Popover.Root>
             <Popover.Trigger asChild>
@@ -1071,8 +1071,8 @@ export function MenuBar({
               </button>
             ) : null}
         </div>
-        {/* Right-aligned controls */}
-        <div className="flex items-center gap-1 ml-auto">
+  {/* Right-aligned controls */}
+  <div className="flex items-center gap-1 ml-2 shrink-0">
           {showJumpToLatest && (
             <button
               type="button"

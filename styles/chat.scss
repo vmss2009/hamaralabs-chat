@@ -113,6 +113,11 @@
   th, td { border: 1px solid #445; padding: 0.4rem 0.5rem; text-align: left; }
   th { background: #1e293b; }
 
+  /* Prevent layout overflow clipping in message bubbles */
+  .hl-scroll-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
   hr {
     border: none;
     border-top: 1px solid #bbb; /* softer contrast divider */
