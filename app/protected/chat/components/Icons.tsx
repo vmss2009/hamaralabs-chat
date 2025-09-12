@@ -1,6 +1,20 @@
 import React from 'react';
 import clsx from 'clsx';
 
+export function IconFiMenu({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+export function IconFiX({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 export function IconSend({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
@@ -9,7 +23,6 @@ export function IconSend({ className }: { className?: string }) {
     </svg>
   );
 }
-
 export function IconBold({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor"><path d="M7 4h6.5a3.5 3.5 0 0 1 0 7H7V4zm0 9h7a3.5 3.5 0 1 1 0 7H7v-7z"/></svg>

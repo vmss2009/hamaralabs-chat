@@ -47,7 +47,6 @@ export default function ChatPage() {
   const [roomName, setRoomName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   const [olderIOEnabled, setOlderIOEnabled] = useState(false);
@@ -287,6 +286,9 @@ export default function ChatPage() {
       // Wait for DOM paint to ensure the bottom marker is present
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+        // Fallback: force scroll container to bottom in case scrollIntoView doesn't target the right scroller
+        const el = listRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
       });
       initialScrolledRef.current = true;
     }
@@ -610,8 +612,6 @@ export default function ChatPage() {
         activeRoom={activeRoom}
         onSelectRoom={(id) => setActiveRoom(id)}
         onCreateRoom={() => setShowModal(true)}
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={(open) => setSidebarOpen(open)}
       />
 
       {/* Main Chat Area */}
