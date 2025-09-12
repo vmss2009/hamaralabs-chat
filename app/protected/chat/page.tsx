@@ -207,7 +207,6 @@ export default function ChatPage() {
         if (!r.ok) throw new Error(d.error || 'Failed to load rooms');
         const list: Room[] = Array.isArray(d.rooms) ? d.rooms.filter(Boolean) : [];
         setRooms(list);
-        if (list.length && !activeRoom) setActiveRoom(list[0].id);
       } catch (e: any) { setError(e.message); }
       finally { setRoomsLoading(false); }
     };
