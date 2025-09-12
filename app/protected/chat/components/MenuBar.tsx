@@ -1032,6 +1032,9 @@ export function MenuBar({
                 </span>
               )}
           </div>
+        </div>
+        {/* Right-aligned, fixed controls: Send or Edit actions */}
+        <div className="flex items-center gap-1 ml-2 shrink-0">
           {showJumpToLatest && (
             <>
               <span className="mx-1 select-none text-slate-600">|</span>
@@ -1058,9 +1061,6 @@ export function MenuBar({
               </button>
             </>
           )}
-        </div>
-        {/* Right-aligned, fixed controls: Send or Edit actions */}
-        <div className="flex items-center gap-1 ml-2 shrink-0">
           {isEditing ? (
             <div className="flex items-center gap-1">
               <button
