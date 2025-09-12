@@ -75,6 +75,8 @@ export default function ChatPage() {
   const olderObserverRef = useRef<IntersectionObserver | null>(null);
   const olderInFlightRef = useRef(false);
   const leftTopSinceLastLoadRef = useRef(false);
+  // Track one-time initial scroll-to-bottom after first render per room
+  const initialScrolledRef = useRef(false);
   // Audio + emoji removed
   const [recordError, setRecordError] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -236,7 +238,7 @@ export default function ChatPage() {
           setMessages(Array.isArray(d1.messages) ? d1.messages : []);
           setNextCursor(d1.nextCursor || null);
           setRoomMembers(Array.isArray(d2.room?.members) ? d2.room.members : []);
-          setShouldAutoScroll(true);
+          // Do not auto-scroll on initial load to avoid jumpiness; user can scroll manually.
         }
       } catch (e: any) { if(!cancelled) setError(e.message); }
       finally { if(!cancelled) setMessagesLoading(false); }
@@ -273,11 +275,27 @@ export default function ChatPage() {
     return () => { cancelled = true; es.close(); };
   }, [activeRoom]);
 
+  // Reset the initial scroll flag whenever the room changes
+  useEffect(() => {
+    initialScrolledRef.current = false;
+  }, [activeRoom]);
+
+  // After the initial 20 messages render (oldest -> newest), scroll to bottom exactly once
+  useEffect(() => {
+    if (!messagesLoading && messages.length > 0 && !initialScrolledRef.current) {
+      // Wait for DOM paint to ensure the bottom marker is present
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+      });
+      initialScrolledRef.current = true;
+    }
+  }, [messagesLoading, messages, activeRoom]);
+
   useEffect(() => {
     if (shouldAutoScroll) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       setShouldAutoScroll(false);
-      setOlderIOEnabled(true);
+      // Do not auto-enable older IO here; enable only after user scrolls away and returns to top
     }
   }, [messages, shouldAutoScroll]);
 
