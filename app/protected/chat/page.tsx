@@ -51,6 +51,7 @@ export default function ChatPage() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   const [olderIOEnabled, setOlderIOEnabled] = useState(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   // Attachments state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -304,22 +305,22 @@ export default function ChatPage() {
     const root = listRef.current;
     if (!root) return;
     const THRESH = 80; // px from top considered "at top"
+    const BOTTOM_THRESH = 200; // px from bottom to consider "away from bottom"
     const onScroll = () => {
       if (root.scrollTop > THRESH) {
-        // User moved away from the top; mark ready for next re-enable
         leftTopSinceLastLoadRef.current = true;
-        // Make sure the observer is paused while away from top
         if (olderObserverRef.current) {
           olderObserverRef.current.disconnect();
           olderObserverRef.current = null;
         }
         if (olderIOEnabled) setOlderIOEnabled(false);
       } else if (root.scrollTop <= THRESH && leftTopSinceLastLoadRef.current) {
-        // User came back to the top; re-enable observing if there are more pages
         if (!olderObserverRef.current && nextCursor) {
           setOlderIOEnabled(true);
         }
       }
+      const distFromBottom = root.scrollHeight - root.scrollTop - root.clientHeight;
+      setShowJumpToLatest(distFromBottom > BOTTOM_THRESH);
     };
     root.addEventListener('scroll', onScroll, { passive: true });
     return () => root.removeEventListener('scroll', onScroll);
@@ -758,7 +759,20 @@ export default function ChatPage() {
                 <div className="flex-1 min-w-0 flex items-center gap-2">
                   <div className="flex flex-col flex-1 min-w-0 gap-2">
                     <div ref={composerRef} className="rounded-lg bg-slate-800/70 border border-slate-700/70 px-3 py-2 shadow-inner shadow-black/30">
-                      {editor && <MenuBar editor={editor} />}
+                      <div className="relative">
+                        {editor && <MenuBar editor={editor} />}
+                        {showJumpToLatest && (
+                          <button
+                            type="button"
+                            onClick={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowJumpToLatest(false); }}
+className="absolute top-0 right-0 translate-x-2 -translate-y-2 h-8 w-8 rounded-full bg-indigo-600 hover:bg-indigo-500 border border-indigo-300/50 shadow-lg shadow-indigo-900/40 grid place-items-center z-50 pointer-events-auto"
+                            title="Jump to latest"
+                            aria-label="Jump to latest"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4 pointer-events-none" fill="none" stroke="white" strokeWidth="1.8"><path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        )}
+                      </div>
                       <div
                         className="relative rounded-xl border border-slate-600/60 bg-slate-900/40"
                         style={{ height: composerHeight }}
