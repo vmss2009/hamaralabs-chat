@@ -6,11 +6,13 @@ export function MessageBody({ html }: { html?: string }) {
   useEffect(() => {
     if (!ref.current) return;
     const root = ref.current;
+    // Render inline math
     const inlineEls = root.querySelectorAll('span[data-type="inline-math"]');
     inlineEls.forEach((el) => {
       const latex = (el as HTMLElement).getAttribute('data-latex') || '';
       try { katex.render(latex, el as HTMLElement, { throwOnError: false, displayMode: false }); } catch {}
     });
+    // Render block math
     const blockEls = root.querySelectorAll('div[data-type="block-math"]');
     blockEls.forEach((el) => {
       const latex = (el as HTMLElement).getAttribute('data-latex') || '';
