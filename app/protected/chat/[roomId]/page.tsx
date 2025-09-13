@@ -587,6 +587,30 @@ export default function ChatRoomPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  // Day divider helpers
+  const getDateKey = (iso: string) => {
+    const d = new Date(iso);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+    };
+  const formatDateLabel = (iso: string) => {
+    const d = new Date(iso);
+    const today = new Date();
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const a = startOf(today).getTime();
+    const b = startOf(d).getTime();
+    const diffDays = Math.round((a - b) / (24 * 60 * 60 * 1000));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mon = months[d.getMonth()];
+    const yyyy = d.getFullYear();
+    return `${dd} ${mon}, ${yyyy}`;
+  };
+
   const startEdit = (m: Message) => {
     setEditingId(m.id);
     setEditValue(m.content || '');
@@ -664,12 +688,25 @@ export default function ChatRoomPage() {
                 </div>
               )}
               <div ref={topSentinelRef} className="h-1" />
-              {messages.map(m => {
-                const mine = m.sender?.id ? (m.sender.id === meId) : (m.sender?.email && m.sender.email === session?.user?.email);
-                const showActions = mine && withinWindow(m.createdAt);
-                const menuOpen = openMenuId === m.id;
-                return (
-                  <div key={m.id} className={clsx('flex w-full overflow-visible', mine ? 'justify-end' : 'justify-start')}>
+              {(() => {
+                let lastDateKey: string | null = null;
+                return messages.map((m, idx) => {
+                  const mine = m.sender?.id ? (m.sender.id === meId) : (m.sender?.email && m.sender.email === session?.user?.email);
+                  const showActions = mine && withinWindow(m.createdAt);
+                  const menuOpen = openMenuId === m.id;
+                  const thisKey = getDateKey(m.createdAt);
+                  const showDivider = thisKey !== lastDateKey;
+                  if (showDivider) lastDateKey = thisKey;
+                  return (
+                    <div key={m.id + '-' + idx} className="w-full">
+                      {showDivider && (
+                        <div className="w-full py-2 flex items-center justify-center">
+                          <div className="px-3 py-1 rounded-full text-[11px] font-medium bg-slate-800/80 border border-slate-700/70 text-slate-300 shadow/20 shadow-black/30">
+                            {formatDateLabel(m.createdAt)}
+                          </div>
+                        </div>
+                      )}
+                      <div className={clsx('flex w-full overflow-visible', mine ? 'justify-end' : 'justify-start')}>
                     <div
                       className={clsx(
                         'group relative max-w-[82%] md:max-w-[68%] rounded-2xl px-4 py-2 text-sm shadow/20 shadow-black/40 flex flex-col gap-2 ring-1 ring-transparent transition-all z-0',
@@ -740,9 +777,11 @@ export default function ChatRoomPage() {
                         </span>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
               {!messagesLoading && !messages.length && <div className="text-xs text-slate-500">No messages yet. Start the conversation.</div>}
               <div ref={bottomRef} />
             </div>
