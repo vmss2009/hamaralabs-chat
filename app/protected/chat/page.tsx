@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { CreateRoomModal } from '@/components/chat/CreateRoomModal';
 
@@ -77,15 +78,15 @@ export default function ChatIndex() {
             <ul className="overflow-hidden rounded-xl border border-slate-800/70 bg-slate-900/40 divide-y divide-slate-800/60">
               {rooms.map((r) => (
                 <li key={r.id}>
-                  <button
-                    onClick={() => { window.location.assign(`/protected/chat/${r.id}`); }}
-                    className="w-full text-left px-4 py-4 hover:bg-slate-800/50 transition flex items-center justify-between gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                  <Link
+                    href={`/protected/chat/${r.id}`}
+                    className="block w-full px-4 py-4 hover:bg-slate-800/50 transition flex items-center justify-between gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                   >
                     <div className="min-w-0">
                       <div className="font-medium text-slate-200 truncate">{r.name}</div>
                     </div>
                     <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-300"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
