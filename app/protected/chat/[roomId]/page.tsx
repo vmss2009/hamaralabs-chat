@@ -929,14 +929,27 @@ export default function ChatRoomPage() {
                 100%
               </button>
             </div>
-            <button
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
-              onClick={() => setViewerSrc(null)}
-              aria-label="Close"
-              title="Close"
-            >
-              <IconX className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href={viewerSrc || undefined}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+                aria-label="Download image"
+                title="Download image"
+              >
+                Download
+              </a>
+              <button
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
+                onClick={() => setViewerSrc(null)}
+                aria-label="Close"
+                title="Close"
+              >
+                <IconX className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-auto">
             <div className="min-h-full w-full flex items-center justify-center">

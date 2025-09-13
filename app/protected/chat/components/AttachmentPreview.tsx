@@ -13,6 +13,18 @@ export function AttachmentPreview({ a, onImageClick }: { a: any; onImageClick?: 
         className="max-w-full max-h-full object-contain cursor-zoom-in select-none"
         draggable={false}
       />
+      {/* Download button (appears on hover) */}
+      <a
+        href={a.url}
+        download={a.filename || true}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition bg-slate-900/80 border border-slate-700/70 text-[10px] px-1.5 py-0.5 rounded-md hover:bg-slate-800"
+        title="Download image"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Download
+      </a>
       <span className="absolute bottom-1 right-1 left-1 text-[10px] px-1 py-0.5 rounded bg-black/50 backdrop-blur text-slate-200 opacity-0 group-hover:opacity-100 transition truncate" title={a.filename}>{a.filename}</span>
     </div>
   );
@@ -22,7 +34,19 @@ export function AttachmentPreview({ a, onImageClick }: { a: any; onImageClick?: 
         <source src={a.url} type={(a.type || '').split(';')[0] || undefined} />
         Your browser does not support the audio element.
       </audio>
-      <div className="text-[10px] mt-1 text-slate-400 break-all">{a.filename}</div>
+      <div className="text-[10px] mt-1 text-slate-400 break-all flex items-center justify-between gap-2">
+        <span className="truncate" title={a.filename}>{a.filename}</span>
+        <a
+          href={a.url}
+          download={a.filename || true}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-slate-200"
+          title="Download audio"
+        >
+          Download
+        </a>
+      </div>
     </div>
   );
   return <a href={a.url} target="_blank" rel="noopener" className="text-xs underline break-all text-indigo-200 hover:text-indigo-100">{a.filename || a.url}</a>;
