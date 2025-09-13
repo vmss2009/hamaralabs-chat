@@ -64,9 +64,10 @@ export default function ChatRoomPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
-  // Image viewer
+  // Media viewer (image or video)
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerZoom, setViewerZoom] = useState<number>(1);
+  const [viewerType, setViewerType] = useState<'image' | 'video'>('image');
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -760,7 +761,14 @@ export default function ChatRoomPage() {
                       {m.attachments?.length ? (
                         <div className="relative">
                           <div className="grid grid-cols-2 gap-2">
-                            {m.attachments.map(a => (<AttachmentPreview key={a.id || a.url} a={a} onImageClick={(src: string) => { setViewerSrc(src); setViewerZoom(1); }} />))}
+                            {m.attachments.map(a => (
+                              <AttachmentPreview
+                                key={a.id || a.url}
+                                a={a}
+                                onImageClick={(src: string) => { setViewerSrc(src); setViewerZoom(1); setViewerType('image'); }}
+                                onVideoClick={(src: string) => { setViewerSrc(src); setViewerZoom(1); setViewerType('video'); }}
+                              />
+                            ))}
                           </div>
                           {m.pending && (
                             <div className="absolute inset-0 rounded-md bg-black/40 grid place-items-center">
@@ -936,8 +944,8 @@ export default function ChatRoomPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs"
-                aria-label="Download image"
-                title="Download image"
+                aria-label="Download media"
+                title="Download media"
               >
                 Download
               </a>
@@ -953,18 +961,35 @@ export default function ChatRoomPage() {
           </div>
           <div className="flex-1 overflow-auto">
             <div className="min-h-full w-full flex items-center justify-center">
-              <img
-                src={viewerSrc}
-                alt="preview"
-                className="select-none"
-                style={{
-                  transform: `scale(${viewerZoom})`,
-                  transformOrigin: 'center center',
-                  maxWidth: 'min(90vw, 1600px)',
-                  maxHeight: 'min(85vh, 1200px)'
-                }}
-                draggable={false}
-              />
+              {viewerType === 'image' ? (
+                <img
+                  src={viewerSrc}
+                  alt="preview"
+                  className="select-none"
+                  style={{
+                    transform: `scale(${viewerZoom})`,
+                    transformOrigin: 'center center',
+                    maxWidth: 'min(90vw, 1600px)',
+                    maxHeight: 'min(85vh, 1200px)'
+                  }}
+                  draggable={false}
+                />
+              ) : (
+                <video
+                  controls
+                  autoPlay
+                  playsInline
+                  style={{
+                    transform: `scale(${viewerZoom})`,
+                    transformOrigin: 'center center',
+                    maxWidth: 'min(90vw, 1600px)',
+                    maxHeight: 'min(85vh, 1200px)'
+                  }}
+                >
+                  <source src={viewerSrc} />
+                  Your browser does not support the video tag.
+                </video>
+              )}
             </div>
           </div>
         </div>
