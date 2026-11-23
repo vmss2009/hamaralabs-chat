@@ -30,4 +30,4 @@
 - Setup Minio Db, add the bucket "chat" and change the ACL rules to public read and private write
 - Install docker engine
 - Use the docker compose file (`docker-compose.yml`) and start the container
-- According to your set hosting configuration (either nginx serving over the internet or home network or locally in your computer) access your calendar !!!!!
+- According to your set hosting configuration (either nginx serving over the internet or home network or locally in your computer) access your chat !!!!!
