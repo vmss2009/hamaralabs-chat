@@ -1,6 +1,9 @@
 import { prisma } from "../db/prisma";
 import { chatBus } from './realtime';
 
+// Upper bound on stored message HTML (characters).
+export const MAX_MESSAGE_CONTENT_LENGTH = 100_000;
+
 export async function listMessages(roomId: string, cursor?: string, takeParam?: number) {
   // Default page size is 30 if not specified; bound between 1 and 50
   const take = Math.min(50, Math.max(1, Number.isFinite(takeParam as number) ? (takeParam as number) : 30));

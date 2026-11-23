@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import katex from 'katex';
+import { sanitizeMessageHtml } from '@/lib/chat/sanitizeMessageHtml';
 
 export function MessageBody({ html }: { html?: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const safeHtml = useMemo(() => (html ? sanitizeMessageHtml(html) : ''), [html]);
   useEffect(() => {
     if (!ref.current) return;
     const root = ref.current;
@@ -43,7 +45,7 @@ export function MessageBody({ html }: { html?: string }) {
       // Don't wrap if pre already scrolls, but ensure container doesn't clip
     });
   });
-  if (!html) return null;
-  return <div ref={ref} className="prose prose-invert max-w-none text-sm break-words" dangerouslySetInnerHTML={{ __html: html }} />;
+  if (!safeHtml) return null;
+  return <div ref={ref} className="prose prose-invert max-w-none text-sm break-words" dangerouslySetInnerHTML={{ __html: safeHtml }} />;
 }
 

@@ -13,7 +13,7 @@ export default auth((req: any) => {
   }
 
   if (req.auth && req.nextUrl.pathname === "/sign-in") {
-    const newUrl = new URL("/protected", req.nextUrl.origin)
+    const newUrl = new URL("/protected/chat", req.nextUrl.origin)
     return Response.redirect(newUrl)
   }
 })

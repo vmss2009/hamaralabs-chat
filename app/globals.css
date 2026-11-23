@@ -20,11 +20,18 @@
   }
 }
 
+/* Larger default UI size. Done via the root font size (everything is rem-based)
+   rather than `zoom`, which made viewport-sized layouts 110% of the screen and
+   forced scrolling in both directions. Percent keeps the user's browser setting. */
+html {
+  font-size: 110%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  zoom: 1.1; /* scale the entire UI for a larger default size */
+  overflow-x: hidden;
 }
 
 /* Rounded editor base styles */

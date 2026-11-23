@@ -8,12 +8,12 @@ datasource db {
 }
 
 model User {
-  id             String    @id
-  email          String    @unique
-  user_meta_data Json?     @default("{}")
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
-  chatRooms      ChatRoom[] @relation("ChatRoomMembers")
+  id             String           @id
+  email          String           @unique
+  user_meta_data Json?            @default("{}")
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  memberships    ChatRoomMember[]
   messages       Message[]
 }
 
@@ -25,37 +25,55 @@ enum MessageType {
 }
 
 model ChatRoom {
-  id            String     @id @default(cuid())
+  id            String           @id @default(cuid())
   name          String
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  lastMessageAt DateTime?  @default(now())
-  members       User[]     @relation("ChatRoomMembers")
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  lastMessageAt DateTime?        @default(now())
+  members       ChatRoomMember[]
   messages      Message[]
 }
 
+enum RoomRole {
+  ADMIN
+  MEMBER
+}
+
+model ChatRoomMember {
+  room     ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  role     RoomRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+
+  @@id([roomId, userId])
+  @@index([userId])
+}
+
 model Message {
-  id         String       @id @default(cuid())
-  chatRoom   ChatRoom     @relation(fields: [chatRoomId], references: [id])
-  chatRoomId String
-  sender     User         @relation(fields: [senderId], references: [id])
-  senderId   String
-  content    String?
-  type       MessageType  @default(TEXT)
+  id          String       @id @default(cuid())
+  chatRoom    ChatRoom     @relation(fields: [chatRoomId], references: [id])
+  chatRoomId  String
+  sender      User         @relation(fields: [senderId], references: [id])
+  senderId    String
+  content     String?
+  type        MessageType  @default(TEXT)
   attachments Attachment[]
-  createdAt  DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+
   @@index([chatRoomId, createdAt])
 }
 
 model Attachment {
-  id         String   @id @default(cuid())
-  url        String
-  type       String
-  filename   String?
-  size       Int?
-  createdAt  DateTime @default(now())
-  message    Message  @relation(fields: [messageId], references: [id])
-  messageId  String
+  id        String   @id @default(cuid())
+  url       String
+  type      String
+  filename  String?
+  size      Int?
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+
   @@index([messageId])
 }
-

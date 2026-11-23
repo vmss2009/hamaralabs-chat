@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/auth';
-import { listRooms, createRoom } from '@/lib/chat/rooms';
+import { listRooms, createRoom, cleanRoomName, MAX_ROOM_NAME_LENGTH } from '@/lib/chat/rooms';
+import { roomErrorResponse } from '@/lib/chat/http';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const MAX_MEMBERS = 500;
 
 export async function GET() {
   const session = await auth();
@@ -11,17 +12,23 @@ export async function GET() {
   return NextResponse.json({ rooms });
 }
 
+// Create a room. The creator becomes its admin; everyone else joins as a member.
 export async function POST(req: Request) {
+  const session = await auth();
+  if(!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const body = await req.json().catch(() => null);
+  const name = cleanRoomName(body?.name);
+  if (!name) {
+    return NextResponse.json({ error: `Room name must be 1-${MAX_ROOM_NAME_LENGTH} characters` }, { status: 400 });
+  }
+  const memberIds = body?.memberIds ?? [];
+  if (!Array.isArray(memberIds) || memberIds.length > MAX_MEMBERS || !memberIds.every((m: unknown) => typeof m === 'string')) {
+    return NextResponse.json({ error: 'memberIds must be an array of user ids' }, { status: 400 });
+  }
   try {
-    const session = await auth();
-    if(!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const body = await req.json();
-    const { room, missingMembers } = await createRoom(session.user.id, body.name, body.memberIds || []);
+    const { room, missingMembers } = await createRoom(session.user.id, name, memberIds);
     return NextResponse.json({ room, missingMembers });
-  } catch (e: any) {
-    if (e.code === 'P2025') {
-      return NextResponse.json({ error: 'One or more member IDs do not exist', detail: e.meta }, { status: 400 });
-    }
-    return NextResponse.json({ error: e.message || 'Failed to create room' }, { status: 500 });
+  } catch (e) {
+    return roomErrorResponse(e, 'create room');
   }
 }

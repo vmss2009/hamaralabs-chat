@@ -9,9 +9,7 @@ export default function ProtectedLayout({
 }) {
   return (
     <SessionProvider>
-      <div className="flex">
-        <main className="">{children}</main>
-      </div>
+      <main className="w-full min-w-0 min-h-dvh">{children}</main>
     </SessionProvider>
   );
 }

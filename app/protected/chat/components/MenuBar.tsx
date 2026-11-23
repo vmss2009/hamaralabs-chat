@@ -443,7 +443,7 @@ export function MenuBar({
                           "bg-indigo-600 text-white"
                       )}
                     >
-                      <span className="text-[10px] font-semibold">H{lvl}</span>
+                      <span className="text-[0.625rem] font-semibold">H{lvl}</span>
                     </button>
                   ))}
                 </div>
@@ -609,7 +609,7 @@ export function MenuBar({
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
                   <div className="rounded-md border border-slate-700/70 p-2 bg-slate-800/40">
-                    <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1">
+                    <div className="text-[0.6875rem] uppercase tracking-wider text-slate-400 mb-1">
                       Text
                     </div>
                     <div className="grid grid-cols-7 gap-2 mb-2">
@@ -641,7 +641,7 @@ export function MenuBar({
                           editor.chain().focus().unsetColor().run();
                           setStyleOpen(false);
                         }}
-                        className="col-span-2 text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70"
+                        className="col-span-2 text-[0.6875rem] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70"
                       >
                         Clear
                       </button>
@@ -665,14 +665,14 @@ export function MenuBar({
                           editor.chain().focus().setColor(tcColor).run();
                           setStyleOpen(false);
                         }}
-                        className="text-[11px] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500"
+                        className="text-[0.6875rem] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500"
                       >
                         Apply
                       </button>
                     </div>
                   </div>
                   <div className="rounded-md border border-slate-700/70 p-2 bg-slate-800/40">
-                    <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1">
+                    <div className="text-[0.6875rem] uppercase tracking-wider text-slate-400 mb-1">
                       Highlight
                     </div>
                     <div className="grid grid-cols-7 gap-2 mb-2">
@@ -708,7 +708,7 @@ export function MenuBar({
                           editor.chain().focus().unsetHighlight().run();
                           setStyleOpen(false);
                         }}
-                        className="col-span-2 text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70"
+                        className="col-span-2 text-[0.6875rem] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70"
                       >
                         Clear
                       </button>
@@ -736,7 +736,7 @@ export function MenuBar({
                             .run();
                           setStyleOpen(false);
                         }}
-                        className="text-[11px] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500"
+                        className="text-[0.6875rem] px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500"
                       >
                         Apply
                       </button>
@@ -764,7 +764,7 @@ export function MenuBar({
                 sideOffset={6}
                 collisionPadding={{ left: 12, right: 12 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
-                className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[18rem] space-y-2"
+                className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-[18rem] max-w-[90vw] space-y-2"
               >
                 <div className="flex gap-2">
                   <button
@@ -920,7 +920,7 @@ export function MenuBar({
                 onCloseAutoFocus={(e) => e.preventDefault()}
                 className="z-[1000] rounded-md border border-slate-700/70 bg-slate-900/95 p-3 shadow-xl shadow-black/50 w-72 max-w-[90vw] max-h-[70vh] overflow-auto space-y-2"
               >
-                <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                <div className="text-[0.6875rem] uppercase tracking-wider text-slate-400">
                   Insert LaTeX
                 </div>
                 <input
@@ -941,7 +941,7 @@ export function MenuBar({
                   placeholder="e.g. x^2 + y^2 = z^2"
                   className="w-full rounded bg-slate-800/70 border border-slate-700/70 px-2 py-1 text-sm focus:outline-none focus:ring-0"
                 />
-                <div className="text-[10px] text-slate-500">
+                <div className="text-[0.625rem] text-slate-500">
                   Cmd/Ctrl+Enter inserts inline, Shift+Enter inserts block
                 </div>
                 <div className="flex items-center gap-2">
@@ -949,7 +949,7 @@ export function MenuBar({
                     type="button"
                     onClick={() => setPreviewMode("inline")}
                     className={clsx(
-                      "text-[11px] px-2 py-1 rounded border",
+                      "text-[0.6875rem] px-2 py-1 rounded border",
                       previewMode === "inline"
                         ? "bg-slate-700 text-white border-slate-600"
                         : "bg-slate-800/60 border-slate-700/70"
@@ -961,7 +961,7 @@ export function MenuBar({
                     type="button"
                     onClick={() => setPreviewMode("block")}
                     className={clsx(
-                      "text-[11px] px-2 py-1 rounded border",
+                      "text-[0.6875rem] px-2 py-1 rounded border",
                       previewMode === "block"
                         ? "bg-slate-700 text-white border-slate-600"
                         : "bg-slate-800/60 border-slate-700/70"
@@ -1027,7 +1027,7 @@ export function MenuBar({
             </button>
             {typeof attachmentsCount === "number" &&
               typeof maxFiles === "number" && (
-                <span className="ml-1 text-[11px] text-slate-400">
+                <span className="ml-1 text-[0.6875rem] text-slate-400">
                   {attachmentsCount}/{maxFiles}
                 </span>
               )}

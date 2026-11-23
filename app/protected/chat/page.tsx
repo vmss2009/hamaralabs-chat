@@ -1,14 +1,16 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { CreateRoomModal } from '@/components/chat/CreateRoomModal';
 
-type Room = { id: string; name: string };
+type Room = { id: string; name: string; myRole?: 'ADMIN' | 'MEMBER' | null; _count?: { members?: number } };
 type User = { id: string; email: string };
 
 export default function ChatIndex() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomsLoading, setRoomsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,17 +55,23 @@ export default function ChatIndex() {
       });
       const data = await res.json();
       if (!res.ok || !data.room) throw new Error(data.error || 'Failed to create room');
-      setRooms(r => [data.room, ...r]);
       setShowModal(false); setRoomName(''); setSelectedMembers(new Set());
+      router.push(`/protected/chat/${data.room.id}`);
     } catch (e: any) { setError(e.message || 'Failed to create'); }
   };
 
   return (
-    <div className="relative min-h-screen w-screen overflow-y-auto bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
+    <div className="relative min-h-dvh w-full overflow-y-auto bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
       <header className="sticky top-0 z-10 border-b border-slate-800/70 bg-slate-900/60 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-sm font-semibold tracking-wide uppercase text-slate-200">Chats</h1>
-          <button onClick={() => setShowModal(true)} className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium shadow">Create chat</button>
+          <div className="flex items-center gap-2 min-w-0">
+            {session?.user?.email && (
+              <span className="hidden sm:block truncate max-w-[16rem] text-[0.6875rem] text-slate-400" title={session.user.email}>{session.user.email}</span>
+            )}
+            <button onClick={() => signOut({ redirectTo: '/sign-in' })} className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs">Sign out</button>
+            <button onClick={() => setShowModal(true)} className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium shadow">Create chat</button>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-4xl px-4 py-6">
@@ -84,6 +92,10 @@ export default function ChatIndex() {
                   >
                     <div className="min-w-0">
                       <div className="font-medium text-slate-200 truncate">{r.name}</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-[0.6875rem] text-slate-400">
+                        {typeof r._count?.members === 'number' && <span>{r._count.members} member{r._count.members === 1 ? '' : 's'}</span>}
+                        {r.myRole === 'ADMIN' && <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/30 text-[0.625rem]">Admin</span>}
+                      </div>
                     </div>
                     <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-300"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </Link>

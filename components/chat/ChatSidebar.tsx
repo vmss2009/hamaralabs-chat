@@ -97,7 +97,7 @@ export function ChatSidebar({ rooms, roomsLoading, activeRoom, onSelectRoom, onC
       >
       <div className="p-3 flex items-center justify-end border-b border-slate-800/70">
         {open && (
-          <button className="text-[11px] px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 border border-slate-600/70" onClick={onCreateRoom}>
+          <button className="text-[0.6875rem] px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 border border-slate-600/70" onClick={onCreateRoom}>
             New
           </button>
         )}

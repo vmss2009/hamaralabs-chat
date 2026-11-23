@@ -16,15 +16,13 @@ import { useParams, useRouter } from 'next/navigation';
 // Local component extraction – use components from /components/chat
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { DragOverlay } from '@/components/chat/DragOverlay';
-import { CreateRoomModal } from '@/components/chat/CreateRoomModal';
-import { ManageMembersModal } from '@/components/chat/ManageMembersModal';
+import { RoomSettingsModal, type RoomMember, type RoomRole } from '@/components/chat/RoomSettingsModal';
 // Keep existing chat UI atoms from the local folder (note the path difference)
 import { MenuBar } from '../components/MenuBar';
 import { IconSpinner, IconX, IconResizeNS, IconPlus, IconMinus } from '../components/Icons';
 import { MessageBody } from '../components/MessageBody';
 import { AttachmentPreview, SelectedAttachmentPreview } from '../components/AttachmentPreview';
 
-interface Room { id: string; name: string; _count?: { messages: number }; }
 interface Message { id: string; content?: string; createdAt: string; sender: any; attachments?: any[]; type: string; pending?: boolean; }
 interface User { id: string; email: string; }
 
@@ -33,23 +31,17 @@ export default function ChatRoomPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
   const activeRoom = (params?.roomId as string) || null;
-  const [rooms, setRooms] = useState<Room[]>([]);
   const [composerHeight, setComposerHeight] = useState<number>(56);
-  const [roomsLoading, setRoomsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [editorEmpty, setEditorEmpty] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
-  const [roomMembers, setRoomMembers] = useState<User[]>([]);
+  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [activeRoomName, setActiveRoomName] = useState<string>('');
   const [manageOpen, setManageOpen] = useState(false);
-  const [addQuery, setAddQuery] = useState('');
-  const [roomName, setRoomName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
@@ -200,26 +192,30 @@ export default function ChatRoomPage() {
     return () => { io.disconnect(); olderObserverRef.current = null; };
   }, [olderIOEnabled, loadOlder]);
 
-  // Optionally fetch rooms if needed in future (removed sidebar)
-  useEffect(() => {
-    const load = async () => {
-      setRoomsLoading(true); setError(null);
-      try {
-        const r = await fetch('/api/chat/rooms');
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Failed to load rooms');
-        const list: Room[] = Array.isArray(d.rooms) ? d.rooms.filter(Boolean) : [];
-        setRooms(list);
-      } catch (e: any) { setError(e.message); }
-      finally { setRoomsLoading(false); }
-    };
-    load();
+  // Fetch users when the room settings dialog opens (for "Add members")
+  useEffect(() => { if(manageOpen) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [manageOpen]);
+
+  const applyRoom = useCallback((room: any) => {
+    setRoomMembers(Array.isArray(room?.members) ? room.members : []);
+    setActiveRoomName(room?.name || '');
   }, []);
 
-  // Fetch users when manage/create modal opens
-  useEffect(() => { if(showModal) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [showModal]);
-  // Also fetch users when manage members modal opens
-  useEffect(() => { if(manageOpen) { fetch('/api/users').then(r=>r.json()).then(d=> setUsers(Array.isArray(d.users)? d.users: [])); } }, [manageOpen]);
+  // Called when we learn we can no longer see this room (removed, room deleted).
+  const loseAccess = useCallback(() => {
+    esRef.current?.close();
+    esRef.current = null;
+    setManageOpen(false);
+    setHasAccess(false); setRoomMembers([]); setActiveRoomName(''); setMessages([]); setNextCursor(null);
+  }, []);
+
+  // Returns false if the current user is not (or no longer) a member.
+  const refreshRoom = useCallback(async (roomId: string) => {
+    const r = await fetch(`/api/chat/room?roomId=${encodeURIComponent(roomId)}`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d?.room) return false;
+    applyRoom(d.room);
+    return true;
+  }, [applyRoom]);
 
   // Load room and check access; if allowed, load messages and subscribe to SSE
   useEffect(() => {
@@ -230,23 +226,16 @@ export default function ChatRoomPage() {
     let es: EventSource | null = null;
     const load = async () => {
       try {
-        // 1) Fetch room details to verify access
+        // 1) Fetch room details to verify access (the API answers 403 for non-members)
         const r2 = await fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`);
         const d2 = await r2.json().catch(() => ({}));
         if (!r2.ok || !d2?.room) {
           if (!cancelled) { setHasAccess(false); setRoomMembers([]); setActiveRoomName(''); setMessages([]); setNextCursor(null); }
           return;
         }
-        const members: any[] = Array.isArray(d2.room?.members) ? d2.room.members : [];
-        const allowed = members.some(m => m?.id === meId);
-        if (!allowed) {
-          if (!cancelled) { setHasAccess(false); setRoomMembers([]); setActiveRoomName(''); setMessages([]); setNextCursor(null); }
-          return;
-        }
         if (cancelled) return;
         setHasAccess(true);
-        setRoomMembers(members as any);
-        setActiveRoomName(d2.room?.name || '');
+        applyRoom(d2.room);
 
         // 2) Load latest messages now that access is confirmed
         const r1 = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(activeRoom)}&take=20`);
@@ -285,6 +274,17 @@ export default function ChatRoomPage() {
             }
           } catch { /* ignore */ }
         });
+        // Room renamed, members/roles changed, or room deleted
+        es.addEventListener('room', async (ev) => {
+          let kind = 'updated';
+          try { kind = JSON.parse((ev as MessageEvent).data)?.kind || kind; } catch { /* ignore */ }
+          if (cancelled) return;
+          if (kind === 'deleted') { loseAccess(); return; }
+          const stillMember = await refreshRoom(activeRoom).catch(() => true);
+          if (!stillMember && !cancelled) loseAccess();
+        });
+        // We were removed from the room by an admin
+        es.addEventListener('removed', () => { if (!cancelled) loseAccess(); });
         es.onerror = () => { /* silent reconnect by browser */ };
       } catch (e: any) {
         if (!cancelled) { setError(e.message || 'Failed to load room'); setHasAccess(false); }
@@ -294,7 +294,7 @@ export default function ChatRoomPage() {
     };
     load();
     return () => { cancelled = true; if (es) es.close(); };
-  }, [activeRoom, meId]);
+  }, [activeRoom, meId, applyRoom, refreshRoom, loseAccess]);
 
   // Reset the initial scroll flag whenever the room changes
   useEffect(() => {
@@ -417,22 +417,30 @@ export default function ChatRoomPage() {
     };
   }, [addFiles]);
 
-  const toggleMember = (id: string) => { setSelectedMembers(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
-
-  const createRoom = async () => {
-    if(!roomName.trim()) return;
-    setError(null);
-    try {
-      const res = await fetch('/api/chat/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: roomName.trim(), memberIds: Array.from(selectedMembers) }) });
-      const data = await res.json();
-      if(!res.ok || !data.room) throw new Error(data.error || 'Failed to create room');
-      setRooms(r => [data.room, ...r]);
-      setShowModal(false); setRoomName(''); setSelectedMembers(new Set());
-      router.push(`/protected/chat/${data.room.id}`);
-      if (data.missingMembers?.length) {
-        setError(`Skipped ${data.missingMembers.length} unknown member(s).`);
-      }
-    } catch (e: any) { setError(e.message); }
+  // ---- Room management (permissions are enforced by the API) ----
+  const patchRoom = async (changes: { name?: string; addIds?: string[]; removeIds?: string[]; roles?: Record<string, RoomRole> }) => {
+    if (!activeRoom) return;
+    const r = await fetch('/api/chat/room', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom, ...changes }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Failed to update room');
+    applyRoom(d.room);
+    if (d.missingMembers?.length) throw new Error(`Skipped ${d.missingMembers.length} unknown user(s).`);
+  };
+  const leaveCurrentRoom = async () => {
+    if (!activeRoom) return;
+    const r = await fetch('/api/chat/room/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Failed to leave room');
+    esRef.current?.close();
+    router.push('/protected/chat');
+  };
+  const deleteCurrentRoom = async () => {
+    if (!activeRoom) return;
+    const r = await fetch(`/api/chat/room?roomId=${encodeURIComponent(activeRoom)}`, { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Failed to delete room');
+    esRef.current?.close();
+    router.push('/protected/chat');
   };
 
   const MAX_FILES = 5;
@@ -582,7 +590,6 @@ export default function ChatRoomPage() {
     }
   };
 
-  const activeRoomObj = rooms.find(r => r.id === activeRoom) || null;
 
   const withinWindow = (createdAt: string) => (Date.now() - new Date(createdAt).getTime()) <= 10 * 60 * 1000;
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -654,7 +661,7 @@ export default function ChatRoomPage() {
   };
 
   return (
-    <div ref={dropRef} className="relative flex h-screen w-screen overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
+    <div ref={dropRef} className="relative flex h-dvh w-full overflow-hidden bg-[linear-gradient(135deg,#0b1220,45%,#0e1628)] text-slate-100">
       {/* Drag & Drop overlay */}
       <DragOverlay show={isDraggingFiles} remaining={MAX_FILES - selectedFiles.length} />
       {/* Main Chat Area */}
@@ -667,8 +674,9 @@ export default function ChatRoomPage() {
           </div>
         )}
         {hasAccess === false && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-slate-400 text-sm">Chat does not exist</div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <div className="text-slate-400 text-sm">This chat doesn&apos;t exist or you&apos;re no longer a member.</div>
+            <button onClick={() => router.push('/protected/chat')} className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs">Back to chats</button>
           </div>
         )}
         {hasAccess === true && (
@@ -680,10 +688,10 @@ export default function ChatRoomPage() {
               onManage={() => setManageOpen(true)}
               onBack={() => router.push('/protected/chat')}
             />
-            <div ref={listRef} className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-3 md:space-y-4 custom-scroll" onClick={()=> setOpenMenuId(null)}>
+            <div ref={listRef} className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-4 sm:py-6 space-y-3 md:space-y-4 custom-scroll" onClick={()=> setOpenMenuId(null)}>
               {olderLoading && (
                 <div className="absolute top-2 left-0 right-0 z-20 flex items-center justify-center pointer-events-none">
-                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-slate-800/90 border border-slate-700/70 text-[11px]">
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-slate-800/90 border border-slate-700/70 text-[0.6875rem]">
                     <IconSpinner className="h-3.5 w-3.5" /> Loading older…
                   </div>
                 </div>
@@ -702,7 +710,7 @@ export default function ChatRoomPage() {
                     <div key={m.id + '-' + idx} className="w-full">
                       {showDivider && (
                         <div className="w-full py-2 flex items-center justify-center">
-                          <div className="px-3 py-1 rounded-full text-[11px] font-medium bg-slate-800/80 border border-slate-700/70 text-slate-300 shadow/20 shadow-black/30">
+                          <div className="px-3 py-1 rounded-full text-[0.6875rem] font-medium bg-slate-800/80 border border-slate-700/70 text-slate-300 shadow/20 shadow-black/30">
                             {formatDateLabel(m.createdAt)}
                           </div>
                         </div>
@@ -717,7 +725,7 @@ export default function ChatRoomPage() {
                       title={new Date(m.createdAt).toLocaleString()}
                     >
                       {/* Sender email label (WhatsApp-style) */}
-                      <div className={clsx('text-[11px] font-semibold leading-none', mine ? 'text-indigo-100/90' : 'text-emerald-300')}>
+                      <div className={clsx('text-[0.6875rem] font-semibold leading-none truncate', mine ? 'text-indigo-100/90' : 'text-emerald-300')}>
                         {m.sender?.email || 'Unknown'}
                       </div>
                       {showActions && (
@@ -779,8 +787,8 @@ export default function ChatRoomPage() {
                       ) : null}
                       {m.content && <MessageBody html={m.content} />}
                       <div className={clsx('flex gap-2 items-center', mine ? 'justify-end' : 'justify-start')}>
-                        {m.pending && <span className="text-[10px] text-yellow-200/90">sending…</span>}
-                        <span className={clsx('text-[10px] tracking-wide uppercase opacity-0 group-hover:opacity-100 transition', mine ? 'text-indigo-100/80' : 'text-slate-400/80')}>
+                        {m.pending && <span className="text-[0.625rem] text-yellow-200/90">sending…</span>}
+                        <span className={clsx('text-[0.625rem] tracking-wide uppercase opacity-0 group-hover:opacity-100 transition', mine ? 'text-indigo-100/80' : 'text-slate-400/80')}>
                           {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
@@ -793,8 +801,8 @@ export default function ChatRoomPage() {
               {!messagesLoading && !messages.length && <div className="text-xs text-slate-500">No messages yet. Start the conversation.</div>}
               <div ref={bottomRef} />
             </div>
-            <footer className="p-4 border-t border-slate-800/70 bg-slate-900/60 backdrop-blur-xl flex flex-col gap-3 relative">
-              {(error || recordError) && <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 px-3 py-1 rounded">{error || recordError}</div>}
+            <footer className="p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-slate-800/70 bg-slate-900/60 backdrop-blur-xl flex flex-col gap-3 relative">
+              {(error || recordError) && <div className="text-[0.6875rem] text-rose-300 bg-rose-950/40 border border-rose-800/50 px-3 py-1 rounded">{error || recordError}</div>}
               <div className="flex items-center gap-3">
                 {/* Hidden file input used by MenuBar onAttach */}
                 <input
@@ -896,18 +904,6 @@ export default function ChatRoomPage() {
         )}
       </section>
 
-      <CreateRoomModal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        roomName={roomName}
-        setRoomName={setRoomName}
-        users={users as any}
-        currentUserId={session?.user?.id as any}
-        selectedMembers={selectedMembers}
-        toggleMember={toggleMember}
-        onCreate={createRoom}
-      />
-
       {viewerSrc && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col">
           <div className="flex items-center justify-between p-3 text-slate-200">
@@ -995,30 +991,19 @@ export default function ChatRoomPage() {
         </div>
       )}
 
-      <ManageMembersModal
+      <RoomSettingsModal
         open={manageOpen}
         onClose={() => setManageOpen(false)}
-        roomMembers={roomMembers as any}
-        users={users as any}
-        addQuery={addQuery}
-        setAddQuery={setAddQuery}
-        currentUserId={session?.user?.id as any}
-        onAdd={async (userId: string) => {
-          try {
-            const r = await fetch('/api/chat/room', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom, addIds: [userId], removeIds: [] })});
-            const d = await r.json();
-            if(!r.ok) throw new Error(d.error || 'Failed to add');
-            setRoomMembers(Array.isArray(d.room?.members) ? d.room.members : []);
-          } catch(e:any) { setError(e.message); }
-        }}
-        onRemove={async (userId: string) => {
-          try {
-            const r = await fetch('/api/chat/room', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: activeRoom, addIds: [], removeIds: [userId] })});
-            const d = await r.json();
-            if(!r.ok) throw new Error(d.error || 'Failed to remove');
-            setRoomMembers(Array.isArray(d.room?.members) ? d.room.members : []);
-          } catch(e:any) { setError(e.message); }
-        }}
+        roomName={activeRoomName}
+        members={roomMembers}
+        users={users}
+        currentUserId={meId}
+        onRename={(name) => patchRoom({ name })}
+        onAdd={(userId) => patchRoom({ addIds: [userId] })}
+        onRemove={(userId) => patchRoom({ removeIds: [userId] })}
+        onSetRole={(userId, role) => patchRoom({ roles: { [userId]: role } })}
+        onLeave={leaveCurrentRoom}
+        onDelete={deleteCurrentRoom}
       />
     </div>
   );
