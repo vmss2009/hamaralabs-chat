@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { signOutCompletely } from '@/lib/auth/sign-out';
 import { CreateRoomModal } from '@/components/chat/CreateRoomModal';
 
 type Room = { id: string; name: string; myRole?: 'ADMIN' | 'MEMBER' | null; _count?: { members?: number } };
@@ -69,7 +70,7 @@ export default function ChatIndex() {
             {session?.user?.email && (
               <span className="hidden sm:block truncate max-w-[16rem] text-[0.6875rem] text-slate-400" title={session.user.email}>{session.user.email}</span>
             )}
-            <button onClick={() => signOut({ redirectTo: '/sign-in' })} className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs">Sign out</button>
+            <button onClick={() => signOutCompletely()} className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700/70 text-xs">Sign out</button>
             <button onClick={() => setShowModal(true)} className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium shadow">Create chat</button>
           </div>
         </div>

@@ -99,12 +99,6 @@ export async function listRooms(userId: string) {
 }
 
 export async function createRoom(userId: string, name: string, memberIds: string[]) {
-  // Ensure current user exists (upsert safeguard)
-  const currentUser = await prisma.user.findUnique({ where: { id: userId } });
-  if (!currentUser) {
-    // We do not know the email here; create placeholder to satisfy relation.
-    await prisma.user.create({ data: { id: userId, email: `${userId}@placeholder.invalid`, user_meta_data: { placeholder: true } } });
-  }
   const others = unique(memberIds).filter((id) => id !== userId);
   const found = others.length ? await prisma.user.findMany({ where: { id: { in: others } }, select: { id: true } }) : [];
   const foundIds = new Set(found.map((u) => u.id));
