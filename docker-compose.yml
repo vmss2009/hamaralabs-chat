@@ -1,0 +1,35 @@
+volumes:
+  db-data:
+
+services:
+  hamaralabs-chat-db:
+    container_name: hamaralabs-chat-db
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: hamaralabs
+      POSTGRES_PASSWORD: hamaralabs
+      POSTGRES_DB: hamaralabs
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - hamaralabs-network
+
+
+  hamaralabs-chat:
+    container_name: hamaralabs-chat
+    image: ghcr.io/vmss2009/hamaralabs-chats:v1
+    restart: always
+    init: true
+    depends_on:
+      - hamaralabs-chat-db
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    networks:
+      - hamaralabs-network
+
+networks:
+  hamaralabs-network:
+    external: true
