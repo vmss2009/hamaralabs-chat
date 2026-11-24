@@ -13,6 +13,7 @@
   - Table support
   - Code block support
 - Works real time
+- Loads latest 10 messages at a time reducing load
 - Pretty responsive design
 
 ## Integrations -
